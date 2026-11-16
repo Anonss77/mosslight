@@ -168,6 +168,7 @@ if (autotest) {
       else if (game.shotConditionMet()) game.shotReady = true;
       world.sync(game, dt);
       game.updateHUD();
+      if (game.shotReady) game.drawMinimap(); // freeze the minimap too
       return;
     }
     game.step(STEP);

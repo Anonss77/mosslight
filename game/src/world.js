@@ -35,7 +35,7 @@ export function createWorld(canvas) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(CAM.fov, 1, 0.1, 200);
-  const ambient = new THREE.AmbientLight(0xffffff, 1.35);
+  const ambient = new THREE.AmbientLight(0xffffff, 1.6);
   scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xfff2d0, 2.4);
   sun.position.set(6, 14, 4);

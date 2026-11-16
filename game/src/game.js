@@ -331,7 +331,7 @@ export class Game {
       this.endRun('defeat');
     }
     this.minimapTick++;
-    if (this.minimapTick % 6 === 0 && !this.opts.autotest) this.drawMinimap();
+    if (this.minimapTick % 6 === 0 && (!this.opts.autotest || this.opts.shot)) this.drawMinimap();
     this.updateHUD();
   }
 
@@ -1346,46 +1346,48 @@ export class Game {
     if (!cv) return;
     const ctx = cv.getContext('2d');
     const S = cv.width; // square canvas
-    const sx = S / WORLD_W, sy = S / WORLD_H;
+    // Uniform scale (the world is 768x576, 4:3): keep proportions, centre
+    // the shorter side vertically. The old sx/sy stretched tiles.
+    const s = S / WORLD_W;
+    const offY = (S - WORLD_H * s) / 2;
+    const px = (x) => x * s;
+    const py = (y) => offY + y * s;
     ctx.clearRect(0, 0, S, S);
     // Round clip.
     ctx.save();
     ctx.beginPath();
     ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
     ctx.clip();
-    ctx.fillStyle = '#101018';
+    ctx.fillStyle = '#141420';
     ctx.fillRect(0, 0, S, S);
     const pal = AREAS[this.area];
+    // Walls first (visible tone), then bright floor tiles on top.
     for (let ty = 0; ty < GRID_H; ty++) {
       for (let tx = 0; tx < GRID_W; tx++) {
-        if (!isFloor(this.dungeon, tx, ty)) continue;
-        ctx.fillStyle = pal.floor;
-        ctx.globalAlpha = 0.85;
-        ctx.fillRect(tx * TILE * sx, ty * TILE * sy, TILE * sx + 0.5, TILE * sy + 0.5);
+        const floor = isFloor(this.dungeon, tx, ty);
+        ctx.fillStyle = floor ? pal.floor : (pal.mapWall || pal.wallTop);
+        ctx.globalAlpha = floor ? 1 : 0.95;
+        ctx.fillRect(px(tx * TILE), py(ty * TILE), TILE * s + 0.6, TILE * s + 0.6);
       }
     }
     ctx.globalAlpha = 1;
-    for (const e of this.enemies) {
-      ctx.fillStyle = '#ff4f6a';
+    const dot = (x, y, r, fill) => {
+      ctx.fillStyle = fill;
       ctx.beginPath();
-      ctx.arc(e.x * sx, e.y * sy, 2.5, 0, Math.PI * 2);
+      ctx.arc(px(x), py(y), r, 0, Math.PI * 2);
       ctx.fill();
-    }
-    if (this.boss) {
-      ctx.fillStyle = '#ffd76a';
-      ctx.beginPath();
-      ctx.arc(this.boss.x * sx, this.boss.y * sy, 4.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
+      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    };
+    for (const e of this.enemies) dot(e.x, e.y, 3, '#ff4f6a');
+    if (this.boss) dot(this.boss.x, this.boss.y, 5, '#ffd76a');
     const p = this.player;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(p.x * sx, p.y * sy, 3.5, 0, Math.PI * 2);
-    ctx.fill();
+    dot(p.x, p.y, 3.5, '#ffffff');
     ctx.strokeStyle = '#ffd76a';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(p.x * sx, p.y * sy, 5.5, 0, Math.PI * 2);
+    ctx.arc(px(p.x), py(p.y), 5.5, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }

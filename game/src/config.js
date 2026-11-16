@@ -171,21 +171,21 @@ export const FEEL = {
 export const AREAS = [
   { // Bloomroot Warrens
     name: 'Bloomroot Warrens',
-    outline: '#173F35', wall: '#1F4A44', wallTop: '#2E6B5E', floor: '#71CC6F',
+    outline: '#2A6B52', wall: '#35705F', wallTop: '#4FA88A', floor: '#71CC6F',
     floorAlt: '#7ED47E', moss: '#A5E37A', water: '#45C8B2', flower: '#FF7099',
-    loot: '#F5D45A', highlight: '#FFF3C4', sky: '#0E2A24',
+    loot: '#F5D45A', highlight: '#FFF3C4', sky: '#173B2E', mapWall: '#57B795',
   },
   { // Cinderglass Works
     name: 'Cinderglass Works',
     outline: '#472C36', wall: '#5C3644', wallTop: '#7A4A58', floor: '#F07F4A',
     floorAlt: '#F58F5C', forge: '#F59B42', machinery: '#35C9D0', hazard: '#E94F62',
-    loot: '#FFE073', highlight: '#FFF2D0', sky: '#2A1420',
+    loot: '#FFE073', highlight: '#FFF2D0', sky: '#2A1420', mapWall: '#C08A96',
   },
   { // Moonmilk Vault
     name: 'Moonmilk Vault',
     outline: '#39294F', wall: '#6058AC', wallTop: '#7A72C4', floor: '#A58CD0',
     floorAlt: '#B39DDB', crystal: '#C9BBF5', glow: '#76DDE0', fungus: '#A7E760',
-    loot: '#FFD76A', highlight: '#F6F0FF', sky: '#1C1430',
+    loot: '#FFD76A', highlight: '#F6F0FF', sky: '#1C1430', mapWall: '#A89FE8',
   },
 ];
 
