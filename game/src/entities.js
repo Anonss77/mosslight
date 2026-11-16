@@ -53,6 +53,8 @@ export class Player {
     this.moving = false;
     this.starfallWindup = 0; // >0 while the ultimate winds up
     this.alive = true;
+    this.castT = 0; // cast-frame timer (visual only, 0.16s per cast)
+    this.hurtT = 0; // hurt-frame timer (visual only, 0.12s per hit)
   }
   get boltDamage() { return HERO.boltDamage + this.up.wick * 3; }
   get boltInterval() { return Math.max(0.2, HERO.boltInterval - this.up.hands * 0.08); }
@@ -69,6 +71,7 @@ export class Player {
     if (rest > 0) {
       this.hp -= rest;
       this.invuln = HERO.invuln;
+      this.hurtT = 0.12; // hurt frame (visual only)
       if (this.hp <= 0) { this.hp = 0; this.alive = false; }
     }
     return amount;
@@ -211,11 +214,35 @@ export class Particles {
       });
     }
   }
+  // Per-type death burst (Astra §7): count, colors, life, distance range
+  // and gravity are per enemy type; all visual-only. Each particle flies
+  // roughly `dist` world px over its life (velocity = dist / life).
+  // RNG HYGIENE: exactly 3 run-RNG calls per particle (angle, distance,
+  // size) — the same as v1's burst() — so the visual layer never perturbs
+  // the gameplay roll stream. Life is fixed per type (no jitter call).
+  burstSpec(x, y, count, colors, rng, opts = {}) {
+    const life = opts.life || FEEL.particleLife;
+    const dist = opts.dist || [12, 30];
+    const grav = opts.gravity || 0;
+    for (let i = 0; i < count; i++) {
+      const a = rng.float() * Math.PI * 2;
+      const d = rng.range(dist[0], dist[1]);
+      const sp = d / life;
+      this.list.push({
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life, maxLife: life,
+        color: colors[i % colors.length],
+        size: opts.size ? rng.range(opts.size[0], opts.size[1]) : rng.range(2, 5),
+        grav,
+      });
+    }
+  }
   update(dt) {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const p = this.list[i];
       p.x += p.vx * dt; p.y += p.vy * dt;
       p.vx *= 0.92; p.vy *= 0.92;
+      if (p.grav) p.vy += p.grav * dt;
       p.life -= dt;
       if (p.life <= 0) this.list.splice(i, 1);
     }

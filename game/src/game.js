@@ -10,6 +10,7 @@ import {
 import { Rng } from './random.js';
 import { Dungeon, bakeLayer } from './dungeon.js';
 import { buildSprites } from './sprites.js';
+import { Ambient, makeVignette, bakeInteractiveSprites, kindFor, KIND_TABLE, INTERACTIVE_SIZE } from './decor.js';
 import { Sfx } from './audio.js';
 import { Input } from './input.js';
 import {
@@ -42,6 +43,15 @@ export class Game {
     this.botSkills = [];
     this.botMove = { x: 0, y: 0 };
     this.interBotT = 0;
+    // v2 visuals (all decorative; no gameplay state here).
+    this.ambient = null;
+    this.vignette = null;
+    this.interSprites = bakeInteractiveSprites();
+    this.interState = [];
+    this.rings = [];
+    this.lastSkillPos = null;
+    this.mothPhase = 0;
+    this.lanternSeed = 0;
     this.bindUi();
     this.showTitle();
   }
@@ -128,10 +138,94 @@ export class Game {
     this.slashT = 0;
     this.starfallFx = null;
     this.cam = { x: 0, y: 0 };
+    this.camOffset = { x: 0, y: 0 }; // shot staging only (visual)
     this.done = null;
     this.shotReady = false;
+    // v2 visuals: ambient particles + vignette + interactive prop state.
+    // Visual seeds derive from the seed directly — the run RNG stream is
+    // never consumed for visuals, so v1 run behaviour is unchanged.
+    // Interactive-reaction bursts use a separate visual RNG for the same
+    // reason (they fire during play and must not shift gameplay rolls).
+    this.visualRng = new Rng((seed ^ 0x51ab3f) >>> 0);
+    this.ambient = new Ambient(seed);
+    this.ambient.setArea(0);
+    this.vignette = makeVignette(0.10);
+    this.interState = this.initInteractive();
+    this.rings = [];
+    this.lastSkillPos = null;
+    this.mothPhase = (seed % 1000) / 1000 * Math.PI * 2;
+    this.lanternSeed = ((seed * 7) % 1000) / 1000 * Math.PI * 2;
     this.setState('playing');
     this.sfx.ensure();
+  }
+
+  // One reaction state per interactive prop slot in the current area.
+  initInteractive() {
+    const decor = this.dungeon.decor;
+    if (!decor) return [];
+    return decor.slots.inter.map((s) => ({
+      slot: s, kind: kindFor(s, this.area, 'inter'),
+      tilt: 0, tiltT: 0, glow: 0, glowT: 0, broken: false,
+      sparkT: 0, flare: 0, open: 0, rot: 0,
+    }));
+  }
+
+  // Interactive prop reactions (Astra §5, all visual-only).
+  // Proximity rules per kind; skill casts trigger break/sparkle/flash.
+  updateInteractive(dt) {
+    const p = this.player;
+    if (!p || !p.alive) return;
+    const sk = this.lastSkillPos;
+    for (const st of this.interState) {
+      if (st.broken) continue;
+      const s = st.slot;
+      const d = Math.hypot(p.x - s.x, p.y - s.y);
+      const dSk = sk ? Math.hypot(sk.x - s.x, sk.y - s.y) : Infinity;
+      st.tiltT = Math.max(0, st.tiltT - dt);
+      st.glowT = Math.max(0, st.glowT - dt);
+      st.sparkT = Math.max(0, st.sparkT - dt);
+      if (st.kind === 'flower') {
+        // Glowcap flowers tilt 12° toward Neri within 28px.
+        if (d < 28) { st.tilt = (p.x >= s.x ? 1 : -1) * (12 * Math.PI / 180); st.tiltT = 0.3; }
+        else if (st.tiltT <= 0) st.tilt *= 0.9;
+      } else if (st.kind === 'pot') {
+        // Root pots break when a skill lands within 40px (4 fragments).
+        if (dSk < 40) {
+          st.broken = true;
+          this.particles.burst(s.x, s.y, 4, ['#8A5548', '#6FCB73', '#A7E68A'], this.visualRng, 80);
+        }
+      } else if (st.kind === 'vine') {
+        // Wall lantern vines brighten when a skill passes within 56px.
+        if (dSk < 56) st.glow = 1;
+        else st.glow = Math.max(0, st.glow - dt / 0.8);
+      } else if (st.kind === 'brazier') {
+        // Cinder braziers flare with Neri's distance (within 48px).
+        const target = d < 48 ? 1 : 0;
+        st.flare += (target - st.flare) * Math.min(1, dt * 6);
+      } else if (st.kind === 'rack') {
+        // Cyan glass racks sparkle when skills pass within 48px.
+        if (dSk < 48 && st.sparkT <= 0) {
+          st.sparkT = 0.5;
+          this.particles.burst(s.x, s.y - 6, 3, ['#B2FFFF', '#FFFFFF', '#65D5D5'], this.visualRng, 50);
+        }
+      } else if (st.kind === 'gear') {
+        // Loose gear piles shift when Neri passes within 20px.
+        if (d < 20) { st.rot = (p.x >= s.x ? 1 : -1) * 0.15; st.sparkT = 0.3; }
+        else st.rot *= 0.9;
+      } else if (st.kind === 'starflower') {
+        // Starflowers open with Neri's distance (within 40px).
+        const target = d < 40 ? 1 : 0;
+        st.open += (target - st.open) * Math.min(1, dt * 5);
+      } else if (st.kind === 'crystal') {
+        // Crystal clusters glow with Neri's distance (within 56px).
+        const target = d < 56 ? 1 : 0;
+        st.glow += (target - st.glow) * Math.min(1, dt * 5);
+      } else if (st.kind === 'rune') {
+        // Floating runes flash when skills pass within 48px.
+        if (dSk < 48) st.glow = 1;
+        else st.glow = Math.max(0, st.glow - dt / 0.6);
+      }
+    }
   }
 
   // ---------------------------------------------------------- main loop
@@ -181,6 +275,17 @@ export class Game {
     this.loot.update(dt, this.player);
     this.particles.update(dt);
     this.dmgNums.update(dt);
+    // v2 visuals: ambient particles, death rings, interactive reactions.
+    if (this.ambient) this.ambient.update(dt, this.player.x, this.player.y);
+    for (let i = this.rings.length - 1; i >= 0; i--) {
+      this.rings[i].t += dt;
+      if (this.rings[i].t >= this.rings[i].dur) this.rings.splice(i, 1);
+    }
+    if (this.lastSkillPos) {
+      this.lastSkillPos.t -= dt;
+      if (this.lastSkillPos.t <= 0) this.lastSkillPos = null;
+    }
+    this.updateInteractive(dt);
     for (const p of this.embers.update(dt)) this.emberTick(p);
     this.updateWave(dt);
     if (this.shakeT > 0) this.shakeT -= dt;
@@ -208,6 +313,8 @@ export class Game {
     if (!p.alive) return;
     // Timers.
     if (p.invuln > 0) p.invuln -= dt;
+    if (p.castT > 0) p.castT -= dt;   // cast frame (visual only)
+    if (p.hurtT > 0) p.hurtT -= dt;   // hurt frame (visual only)
     if (p.shieldTime > 0) { p.shieldTime -= dt; if (p.shieldTime <= 0) p.shield = 0; }
     for (const k of Object.keys(p.cooldowns)) if (p.cooldowns[k] > 0) p.cooldowns[k] -= dt;
     p.energy = Math.min(HERO.maxEnergy, p.energy + HERO.energyRegen * dt);
@@ -282,6 +389,8 @@ export class Game {
     if (p.cooldowns[id] > 0 || p.energy < def.cost) return;
     p.energy -= def.cost;
     p.cooldowns[id] = def.cooldown;
+    p.castT = 0.16; // cast frame (visual only)
+    this.lastSkillPos = { x: p.x, y: p.y, t: 0.5 }; // interactive reactions
     this.sfx.skill();
     if (id === 'crescent') {
       this.slashT = 0.15;
@@ -400,7 +509,16 @@ export class Game {
   killEnemy(e) {
     this.kills++;
     this.score += SCORE.enemy;
-    this.particles.burst(e.x, e.y, FEEL.deathParticles, ['#FF7FA8', '#9BD96A', '#C9973F', '#FFF3C4'], this.rng);
+    // Per-type death burst (Astra §7, visual only). Count is
+    // FEEL.deathParticles (8) for every type — the design's 7/9 would shift
+    // the run-RNG stream and flip v1's verified seeds; the 1-particle
+    // difference is invisible in play.
+    const spec = {
+      puffcap: { colors: ['#E66B9A', '#E66B9A', '#E66B9A', '#E66B9A', '#FFB3C7', '#FFB3C7', '#B7E36B', '#B7E36B'], life: 0.42, dist: [12, 26] },
+      tinket: { colors: ['#B77A3E', '#F2C267', '#65D5D5', '#E7B35A', '#B77A3E', '#F2C267', '#65D5D5', '#E7B35A'], life: 0.36, dist: [10, 22] },
+      brambler: { colors: ['#7C5949', '#B17A57', '#5DBB72', '#A7E68A', '#E3FF9A', '#7C5949', '#B17A57', '#5DBB72'], life: 0.48, dist: [14, 30] },
+    }[e.type] || { colors: ['#FF7FA8', '#9BD96A', '#C9973F', '#FFF3C4'], life: FEEL.particleLife, dist: [12, 26] };
+    this.particles.burstSpec(e.x, e.y, FEEL.deathParticles, spec.colors, this.rng, { life: spec.life, dist: spec.dist, gravity: 60 });
     this.sfx.death();
     // Loot: coins always; hearts only when the player is hurt; shards for bramblers.
     this.loot.spawn('coin', e.x, e.y, 1, this.rng);
@@ -416,7 +534,12 @@ export class Game {
 
   killBoss() {
     this.score += SCORE.boss;
-    this.particles.burst(this.boss.x, this.boss.y, FEEL.bossDeathParticles, ['#76DDE0', '#FFD76A', '#FFF3C4', '#B9A9F0'], this.rng, 260);
+    // 24 particles (FEEL.bossDeathParticles, as in v1 — the design's 20
+    // would shift the run-RNG stream; the burst is the run's last roll
+    // consumer, but the loot spawns after it still roll).
+    this.particles.burstSpec(this.boss.x, this.boss.y, FEEL.bossDeathParticles, ['#76DDE0', '#FFD76A', '#FFF3C4', '#B9A9F0', '#45C6C4'], this.rng, { life: 0.72, dist: [28, 80], gravity: 40 });
+    // Expanding death ring (80px, 600ms) — must not hide the boss HP bar.
+    this.rings.push({ x: this.boss.x, y: this.boss.y, t: 0, dur: 0.6, maxR: 80, color: '178,255,255' });
     this.shake(FEEL.shakeBossDie[0], FEEL.shakeBossDie[1]);
     // Boss loot: 30 coins, 3 shards, one big heart (+30 HP).
     for (let i = 0; i < 10; i++) this.loot.spawn('coin', this.boss.x + this.rng.range(-30, 30), this.boss.y + this.rng.range(-30, 30), 3, this.rng);
@@ -740,6 +863,9 @@ export class Game {
     if (newArea !== this.area) {
       this.area = newArea;
       this.layer = bakeLayer(this.dungeon, newArea);
+      this.ambient.setArea(newArea);
+      this.vignette = makeVignette(newArea === 2 ? 0.06 : 0.10);
+      this.interState = this.initInteractive();
     }
     this.waveT = WAVE_LEN;
     this.groupsSpawned = 0;
@@ -968,14 +1094,16 @@ export class Game {
     // Camera follows the player, clamped to the world.
     const px = this.player ? this.player.x * SCALE : 0;
     const py = this.player ? this.player.y * SCALE : 0;
-    let cx = Math.max(0, Math.min(WORLD_W * SCALE - VIEW_W, px - VIEW_W / 2));
-    let cy = Math.max(0, Math.min(WORLD_H * SCALE - VIEW_H, py - VIEW_H / 2));
+    let cx = Math.max(0, Math.min(WORLD_W * SCALE - VIEW_W, px - VIEW_W / 2)) + this.camOffset.x;
+    let cy = Math.max(0, Math.min(WORLD_H * SCALE - VIEW_H, py - VIEW_H / 2)) + this.camOffset.y;
     if (this.shakeT > 0) {
       cx += (Math.random() - 0.5) * 2 * this.shakeMag;
       cy += (Math.random() - 0.5) * 2 * this.shakeMag;
     }
     this.cam = { x: cx, y: cy };
     if (this.layer) g.drawImage(this.layer, -cx, -cy);
+    // Light vignette (screen-space, never over the player/HUD).
+    if (this.vignette) g.drawImage(this.vignette, 0, 0);
     const X = (wx) => wx * SCALE - cx;
     const Y = (wy) => wy * SCALE - cy;
     // Chests and statues.
@@ -1006,6 +1134,10 @@ export class Game {
       g.fillStyle = 'rgba(255,210,90,0.45)';
       g.beginPath(); g.arc(X(p.x), Y(p.y), p.radius * SCALE * 0.55, 0, Math.PI * 2); g.fill();
     }
+    // Interactive prop bases (reactions drawn after Neri).
+    this.renderInteractiveBases(g, X, Y);
+    // Ambient particles (behind enemies).
+    if (this.ambient) this.ambient.render(g, X, Y);
     // Boss telegraphs (floor markers, drawn before entities).
     if (this.boss?.telegraph) this.renderBossTelegraph(g, X, Y);
     // Enemies.
@@ -1014,6 +1146,15 @@ export class Game {
     if (this.boss) this.renderBoss(g, X, Y);
     // Player + lantern + moth.
     if (this.player.alive) this.renderPlayer(g, X, Y);
+    // Interactive reaction glows (after Neri, per Astra's draw order).
+    this.renderInteractiveGlows(g, X, Y);
+    // Expanding death rings.
+    for (const r of this.rings) {
+      const frac = r.t / r.dur;
+      g.strokeStyle = `rgba(${r.color},${(1 - frac) * 0.8})`;
+      g.lineWidth = 4;
+      g.beginPath(); g.arc(X(r.x), Y(r.y), (20 + (r.maxR - 20) * frac) * SCALE, 0, Math.PI * 2); g.stroke();
+    }
     // Slash arc.
     if (this.slashT > 0) {
       const p = this.player;
@@ -1098,22 +1239,50 @@ export class Game {
   }
 
   renderEnemy(g, e, X, Y) {
-    const spr = e.type === 'puffcap' ? this.sprites.puffcap : e.type === 'tinket' ? this.sprites.tinket : this.sprites.brambler;
+    // Ground shadow (no shadowBlur).
+    g.fillStyle = 'rgba(12,18,32,0.30)';
+    g.beginPath(); g.ellipse(X(e.x), Y(e.y) + 9 * SCALE, 12 * SCALE, 3 * SCALE, 0, 0, Math.PI * 2); g.fill();
+    // Hit flash uses the per-type flash sprite (visual only).
+    let spr = e.type === 'puffcap' ? this.sprites.puffcap : e.type === 'tinket' ? this.sprites.tinket : this.sprites.brambler;
+    if (e.flash > 0) {
+      spr = e.type === 'puffcap' ? this.sprites.puffFlash : e.type === 'tinket' ? this.sprites.tinkFlash : this.sprites.bramFlash;
+    }
     const bob = e.state === 'hop' ? -4 : Math.sin(this.time * 8 + e.id) * 1.5;
     const w = spr.width * SCALE, h = spr.height * SCALE;
     const sx = X(e.x) - w / 2, sy = Y(e.y) - h / 2 + bob * SCALE;
     g.drawImage(spr, sx, sy, w, h);
-    if (e.flash > 0) {
-      g.globalAlpha = e.flash / 0.08 * 0.7;
-      g.fillStyle = '#FFFFFF';
-      g.beginPath(); g.arc(X(e.x), Y(e.y), e.radius * SCALE, 0, Math.PI * 2); g.fill();
-      g.globalAlpha = 1;
-    }
-    // Brambler root telegraph ring.
-    if (e.type === 'brambler' && e.state === 'root') {
-      g.strokeStyle = 'rgba(255,80,80,0.7)';
-      g.lineWidth = 3;
-      g.beginPath(); g.arc(X(e.x), Y(e.y), ENEMIES.brambler.slamRadius * SCALE, 0, Math.PI * 2); g.stroke();
+    // Telegraphs (Astra §7) — all visual, no timing changes.
+    if (e.type === 'puffcap' && e.state === 'pause') {
+      // Cap flashes #FFF0A6 twice over 240ms + 3px ring.
+      const phase = Math.floor((ENEMIES.puffcap.pause - e.stateT) / 0.12) % 2;
+      if (phase === 0) {
+        g.fillStyle = '#FFF0A6';
+        g.fillRect(sx + w * 0.25, sy + h * 0.1, w * 0.5, h * 0.2);
+      }
+      g.strokeStyle = 'rgba(255,240,166,0.8)'; g.lineWidth = 3;
+      g.beginPath(); g.arc(X(e.x), Y(e.y), e.radius * SCALE + 6, 0, Math.PI * 2); g.stroke();
+    } else if (e.type === 'tinket' && e.state === 'aim') {
+      // Lens -> #FFF0A6, key rotates 90° over 180ms, 2 yellow marks.
+      const frac = Math.min(1, (ENEMIES.tinket.aimTime - e.stateT) / 0.18);
+      g.fillStyle = '#FFF0A6';
+      g.beginPath(); g.arc(sx + w * 0.62, sy + h * 0.32, 4, 0, Math.PI * 2); g.fill();
+      g.save();
+      g.translate(sx + w * 0.18, sy + h * 0.3);
+      g.rotate(frac * Math.PI / 2);
+      g.fillStyle = '#E05B4F';
+      g.fillRect(-2, -8, 4, 16);
+      g.restore();
+      g.fillStyle = '#FFF0A6';
+      g.fillRect(X(e.x) - 14, Y(e.y) - e.radius * SCALE - 14, 4, 4);
+      g.fillRect(X(e.x) + 10, Y(e.y) - e.radius * SCALE - 14, 4, 4);
+    } else if (e.type === 'brambler' && e.state === 'root') {
+      // Leaves brighten + green ring 8->18px over 260ms + eyes #FFF0A6.
+      const frac = Math.min(1, (ENEMIES.brambler.rootTime - e.stateT) / 0.26);
+      g.strokeStyle = `rgba(227,255,154,${0.5 + 0.5 * frac})`; g.lineWidth = 3;
+      g.beginPath(); g.arc(X(e.x), Y(e.y), (8 + 10 * frac) * SCALE, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = '#FFF0A6';
+      g.fillRect(sx + w * 0.17, sy + h * 0.33, 4, 4);
+      g.fillRect(sx + w * 0.54, sy + h * 0.33, 4, 4);
     }
     // Small HP bar when hurt.
     if (e.hp < e.maxHp) {
@@ -1125,10 +1294,35 @@ export class Game {
 
   renderBoss(g, X, Y) {
     const b = this.boss;
+    // Ground shadow (54x12 at +24).
+    g.fillStyle = 'rgba(18,20,50,0.42)';
+    g.beginPath(); g.ellipse(X(b.x), Y(b.y) + 24 * SCALE, 27 * SCALE, 6 * SCALE, 0, 0, Math.PI * 2); g.fill();
     const spr = b.flash > 0 ? this.sprites.bellWhite : this.sprites.bell;
     const bob = Math.sin(this.time * 3) * 3;
     const w = spr.width * SCALE, h = spr.height * SCALE;
-    g.drawImage(spr, X(b.x) - w / 2, Y(b.y) - h / 2 + bob, w, h);
+    // Clapper swing: the whole bell sways 3px while telegraphing.
+    const sway = b.telegraph ? Math.sin(this.time * 22) * 3 : 0;
+    g.drawImage(spr, X(b.x) - w / 2 + sway, Y(b.y) - h / 2 + bob, w, h);
+    // Telegraph: crown flashes #FFF0A6 + cyan ring 48->68px over 360ms.
+    if (b.telegraph) {
+      const frac = Math.min(1, b.telegraph.t / 0.36);
+      g.fillStyle = '#FFF0A6';
+      g.fillRect(X(b.x) - 10, Y(b.y) - h / 2 + bob - 4, 20, 8);
+      g.strokeStyle = `rgba(178,255,255,${0.6 * (1 - frac * 0.4)})`; g.lineWidth = 4;
+      g.beginPath(); g.arc(X(b.x), Y(b.y), (48 + 20 * frac) * SCALE, 0, Math.PI * 2); g.stroke();
+      // Mouth -> #8F4F9F in the final 100ms.
+      if (b.telegraph.t > b.telegraph.dur - 0.1) {
+        g.fillStyle = '#8F4F9F';
+        g.fillRect(X(b.x) - 12, Y(b.y) + 14 + bob, 24, 10);
+      }
+    }
+    // Hit flash: white 80ms + 4-point star 100ms.
+    if (b.flash > 0) {
+      const cx = X(b.x), cy = Y(b.y);
+      g.fillStyle = 'rgba(255,255,255,0.9)';
+      g.fillRect(cx - 2, cy - 16, 4, 32);
+      g.fillRect(cx - 16, cy - 2, 32, 4);
+    }
     // Roar flash.
     if (b.state === 'roar') {
       g.strokeStyle = 'rgba(255,215,106,0.8)';
@@ -1137,32 +1331,109 @@ export class Game {
     }
   }
 
+  renderInteractiveBases(g, X, Y) {
+    for (const st of this.interState) {
+      if (st.broken) continue;
+      const s = st.slot;
+      const spr = this.interSprites[this.area]?.[st.kind];
+      if (!spr) continue;
+      const [w, h] = INTERACTIVE_SIZE[st.kind];
+      const cx = X(s.x), cy = Y(s.y);
+      const dw = (w + 8) * SCALE, dh = (h + 8) * SCALE;
+      if (st.tilt !== 0 || st.rot !== 0) {
+        g.save();
+        g.translate(cx, cy);
+        g.rotate(st.tilt || st.rot);
+        g.drawImage(spr, -dw / 2, -dh / 2, dw, dh);
+        g.restore();
+      } else if (st.open > 0 && st.kind === 'starflower') {
+        const sc = 1 + 0.15 * st.open;
+        g.drawImage(spr, cx - (dw * sc) / 2, cy - (dh * sc) / 2, dw * sc, dh * sc);
+      } else {
+        g.drawImage(spr, cx - dw / 2, cy - dh / 2, dw, dh);
+      }
+    }
+  }
+
+  renderInteractiveGlows(g, X, Y) {
+    for (const st of this.interState) {
+      if (st.broken) continue;
+      const s = st.slot;
+      const cx = X(s.x), cy = Y(s.y);
+      const glowA = Math.max(st.glow, st.flare * 0.9);
+      if (glowA > 0.05 && (st.kind === 'vine' || st.kind === 'crystal' || st.kind === 'rune' || st.kind === 'brazier')) {
+        const col = st.kind === 'brazier' ? '255,138,42' : st.kind === 'crystal' ? '217,245,255' : st.kind === 'rune' ? '199,216,255' : '255,240,166';
+        g.save();
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = glowA * 0.35;
+        g.fillStyle = `rgba(${col},1)`;
+        g.beginPath(); g.arc(cx, cy, 13 * SCALE, 0, Math.PI * 2); g.fill();
+        g.restore();
+      }
+    }
+  }
+
   renderPlayer(g, X, Y) {
     const p = this.player;
-    const frame = p.moving ? (Math.floor(p.walkPhase) % 2) : 0;
-    const spr = this.sprites.neri[frame];
+    // Frame: hurt (120ms) > cast (160ms) > walk (4 frames @110ms) > idle.
+    let spr, frameIdx = 0;
+    if (p.hurtT > 0) spr = this.sprites.neriHurt;
+    else if (p.castT > 0) spr = this.sprites.neriCast;
+    else if (p.moving) {
+      frameIdx = Math.floor(p.walkPhase / 1.1) % 4;
+      spr = this.sprites.neri[frameIdx + 1];
+    } else spr = this.sprites.neri[0];
     const bob = p.moving ? Math.sin(p.walkPhase * 2) * 1 : 0;
     const w = spr.width * SCALE, h = spr.height * SCALE;
-    // Invulnerability blink.
+    const px = X(p.x), py = Y(p.y);
+    // Ground shadow (30x8 at +17).
+    g.fillStyle = 'rgba(12,18,32,0.34)';
+    g.beginPath(); g.ellipse(px, py + 17 * SCALE, 15 * SCALE, 4 * SCALE, 0, 0, Math.PI * 2); g.fill();
+    // Moth companion (drawn BEFORE Neri, rear-left, per Astra's order).
+    const tms = this.time * 1000;
+    const mbaseX = px - 24, mbaseY = py - 12;
+    const mx = mbaseX + Math.sin(tms * 0.004 + this.mothPhase) * 8;
+    const my = mbaseY + Math.sin(tms * 0.007 + this.mothPhase * 1.7) * 5;
+    const mframe = Math.floor(tms / 90) % 2;
+    g.drawImage(this.sprites.moth[mframe], mx - 7, my - 5, 14, 10);
+    // 2px sparkle every 1.4s.
+    if ((tms + this.mothPhase * 1000) % 1400 < 100) {
+      g.fillStyle = '#FFF0A6';
+      g.fillRect(mx + 6, my - 8, 2, 2);
+    }
+    // Neri.
     if (p.invuln > 0 && Math.floor(this.time * 12) % 2 === 0) g.globalAlpha = 0.5;
-    g.drawImage(spr, X(p.x) - w / 2, Y(p.y) - h / 2 + bob, w, h);
+    g.drawImage(spr, px - w / 2, py - h / 2 + bob, w, h);
     g.globalAlpha = 1;
-    // Lantern in hand (right side, bobbing with a glow).
-    const lx = X(p.x) + 16, ly = Y(p.y) + 6 + Math.sin(this.time * 4) * 2;
-    g.fillStyle = 'rgba(255,201,60,0.18)';
-    g.beginPath(); g.arc(lx, ly, 26, 0, Math.PI * 2); g.fill();
-    g.drawImage(this.sprites.lantern, lx - 10, ly - 12, 20, 24);
+    // Lantern: 3-band radial glow (lighter) + sprite at the per-frame offset.
+    // Cast frame: bigger lantern (8x8) + white crescent toward the aim;
+    // hurt frame: lantern lowered.
+    let off, lw = 12, lh = 14, crescent = false;
+    if (p.castT > 0) { off = [-12, 13]; lw = 16; lh = 16; crescent = true; }
+    else if (p.hurtT > 0) { off = [-6, 21]; }
+    else off = this.sprites.lanternPos[frameIdx];
+    const lx = px + off[0], ly = py + off[1] + bob;
+    const flick = Math.max(0.90, Math.min(1.10, 1.0 + 0.06 * Math.sin(tms * 0.011 + this.lanternSeed) + 0.025 * Math.sin(tms * 0.027 + this.lanternSeed * 2.1)));
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = Math.min(1, flick);
+    g.drawImage(this.sprites.lanternGlow, lx - 54, ly - 54, 108, 108);
+    g.restore();
+    g.drawImage(this.sprites.lantern, lx - lw / 2, ly - lh / 2, lw, lh);
+    if (crescent) {
+      // White crescent toward the aim (facing) side.
+      const fx = p.facing.x >= 0 ? 1 : -1;
+      g.fillStyle = '#FFF0A6';
+      g.fillRect(lx + fx * 8 - 1, ly - 6, 3, 3);
+      g.fillRect(lx + fx * 10 - 1, ly - 2, 3, 3);
+      g.fillRect(lx + fx * 8 - 1, ly + 3, 3, 3);
+    }
     // Glassguard shield ring.
     if (p.shield > 0) {
       g.strokeStyle = 'rgba(127,212,255,0.85)';
       g.lineWidth = 4;
-      g.beginPath(); g.arc(X(p.x), Y(p.y), (p.radius + 8) * SCALE, 0, Math.PI * 2); g.stroke();
+      g.beginPath(); g.arc(px, py, (p.radius + 8) * SCALE, 0, Math.PI * 2); g.stroke();
     }
-    // Moth companion, trailing behind with a gentle bob.
-    const mx = X(p.x) - 26 + Math.sin(this.time * 2) * 4;
-    const my = Y(p.y) - 18 + Math.sin(this.time * 5) * 3;
-    const mframe = Math.floor(this.time * 8) % 2;
-    g.drawImage(this.sprites.moth[mframe], mx - 12, my - 12, 24, 24);
   }
 
   renderTitle(g) {
@@ -1184,7 +1455,7 @@ export class Game {
     // Neri standing in the entrance, with moth.
     const nx = VIEW_W / 2 - 120, ny = 430;
     g.drawImage(this.sprites.neri[0], nx, ny, 96, 96);
-    g.drawImage(this.sprites.lantern, nx + 66, ny + 40, 40, 48);
+    g.drawImage(this.sprites.lantern, nx + 66, ny + 40, 20, 28);
     g.drawImage(this.sprites.moth[0], nx - 60, ny - 20, 48, 48);
   }
 

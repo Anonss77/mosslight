@@ -7,6 +7,7 @@
 
 import { DUN_W, DUN_H, TILE, WORLD_W, WORLD_H, SCALE, AREAS } from './config.js';
 import { Rng } from './random.js';
+import { FLOOR_VARIANTS, WALL_KIT, BORDER_COLOR, plainFloorHighlight, buildDecor, paintDecorStatic, cinderGlassShard } from './decor.js';
 
 const WALL = 1;
 const FLOOR = 0;
@@ -308,57 +309,98 @@ export class Dungeon {
 }
 
 // Bake one area's static layer (floors, walls, decor) to an offscreen
-// canvas at SCALE, so each frame only blits it. Speckles use the run RNG
-// (deterministic per seed).
+// canvas at SCALE, so each frame only blits it. All variation uses a
+// dedicated seeded stream (dungeon.seed*31 + areaIdx*101) — never the run
+// RNG, never Math.random — so the same seed dresses the same dungeon.
+// Bake order (Astra §2): floor -> variants -> walls -> growths/cracks
+// -> large props -> small props/flecks -> depth shading.
 export function bakeLayer(dungeon, areaIdx) {
   const pal = AREAS[areaIdx];
+  const kit = WALL_KIT[areaIdx];
   const c = document.createElement('canvas');
   c.width = WORLD_W * SCALE; c.height = WORLD_H * SCALE;
   const g = c.getContext('2d');
   const rng = new Rng(dungeon.seed * 31 + areaIdx * 101);
   g.imageSmoothingEnabled = false;
+  const decor = buildDecor(dungeon);
+  dungeon.decor = decor; // placement is area-independent; only the skin changes
+  const variants = FLOOR_VARIANTS[areaIdx];
+  const spawn = dungeon.playerStart();
 
   for (let ty = 0; ty < DUN_H; ty++) {
     for (let tx = 0; tx < DUN_W; tx++) {
       const t = dungeon.tiles[ty * DUN_W + tx];
       const px = tx * TILE * SCALE, py = ty * TILE * SCALE, s = TILE * SCALE;
+      const wx = tx * TILE, wy = ty * TILE;
       if (t === WALL) {
-        g.fillStyle = pal.wall;
+        g.fillStyle = kit.face;
         g.fillRect(px, py, s, s);
-        // Top highlight where a wall meets floor below.
-        if (ty + 1 < DUN_H && dungeon.tiles[(ty + 1) * DUN_W + tx] === FLOOR) {
-          g.fillStyle = pal.highlight;
+        const floorBelow = ty + 1 < DUN_H && dungeon.tiles[(ty + 1) * DUN_W + tx] === FLOOR;
+        if (floorBelow) {
+          // Visible face: 3px bright top strip, 4px dark lower strip.
+          g.fillStyle = kit.top;
+          g.fillRect(px, py + s - 12, s, 6);
+          g.fillStyle = kit.low;
+          g.fillRect(px, py + s - 8, s, 8);
+          kit.growth(g, wx, wy + 2, rng);
+          kit.crack(g, wx, wy + 2, rng);
+          if (kit.rust) kit.rust(g, wx, wy + 2, rng);
+          if (kit.rivet) kit.rivet(g, wx, wy + 2, rng);
+          if (kit.deposit) kit.deposit(g, wx, wy + 2, rng);
+        }
+        // Side shade where a wall meets floor on its west/south side.
+        if (tx > 0 && dungeon.tiles[ty * DUN_W + tx - 1] === FLOOR) {
+          g.fillStyle = kit.sideW || kit.side;
+          g.fillRect(px, py, 4, s);
+        }
+        if (floorBelow) {
+          g.fillStyle = kit.sideS || kit.side;
           g.fillRect(px, py + s - 4, s, 4);
         }
+        // Corner treatment: wall with floor on two sides.
+        const floorL = tx > 0 && dungeon.tiles[ty * DUN_W + tx - 1] === FLOOR;
+        const floorR = tx + 1 < DUN_W && dungeon.tiles[ty * DUN_W + tx + 1] === FLOOR;
+        if (floorBelow && (floorL || floorR) && kit.corner) kit.corner(g, wx, wy);
         g.fillStyle = pal.outline;
         g.fillRect(px, py, s, 2);
       } else {
         const cave = dungeon.caveTiles.has(ty * DUN_W + tx);
         g.fillStyle = cave ? pal.moss : pal.floor;
         g.fillRect(px, py, s, s);
-        // Speckles: moss dots, flowers, water patches.
+        // One seeded variant roll per floor tile.
         const roll = rng.float();
-        if (roll < 0.06) {
-          g.fillStyle = pal.moss;
-          g.fillRect(px + 6, py + 8, 8, 6);
-          g.fillRect(px + 18, py + 20, 6, 5);
-        } else if (roll < 0.09) {
-          g.fillStyle = pal.flower;
-          g.fillRect(px + 12, py + 10, 8, 8);
-          g.fillStyle = pal.highlight;
-          g.fillRect(px + 14, py + 12, 4, 4);
-        } else if (roll < 0.11) {
-          g.fillStyle = pal.water;
-          g.fillRect(px + 4, py + 6, 24, 18);
-          g.fillStyle = pal.highlight;
-          g.fillRect(px + 8, py + 10, 10, 3);
-        } else if (roll < 0.13) {
-          g.fillStyle = pal.loot;
-          g.fillRect(px + 14, py + 14, 4, 4);
+        let painted = false;
+        for (const v of variants) {
+          if (roll < v.upto) {
+            // Cyan glass shards never appear within 6px of Neri's spawn.
+            if (v.paint === cinderGlassShard) {
+              const dx = wx + 8 - spawn.x, dy = wy + 8 - spawn.y;
+              if (dx * dx + dy * dy < 24 * 24) break;
+            }
+            v.paint(g, wx, wy, rng);
+            painted = true;
+            break;
+          }
         }
+        if (!painted) plainFloorHighlight(g, wx, wy, areaIdx, rng);
       }
     }
   }
+  // Wall-border depth: 2px border on floor tiles adjacent to walls.
+  const [borderCol, borderA] = BORDER_COLOR[areaIdx];
+  g.globalAlpha = borderA;
+  g.fillStyle = borderCol;
+  for (let ty = 0; ty < DUN_H; ty++) {
+    for (let tx = 0; tx < DUN_W; tx++) {
+      if (dungeon.tiles[ty * DUN_W + tx] !== FLOOR) continue;
+      const px = tx * TILE * SCALE, py = ty * TILE * SCALE, s = TILE * SCALE;
+      if (ty > 0 && dungeon.tiles[(ty - 1) * DUN_W + tx] === WALL) g.fillRect(px, py, s, 4);
+      if (tx > 0 && dungeon.tiles[ty * DUN_W + tx - 1] === WALL) g.fillRect(px, py, 4, s);
+    }
+  }
+  g.globalAlpha = 1;
+  // Static decor (large -> small -> foreground tufts), baked once.
+  paintDecorStatic(g, dungeon, areaIdx, decor);
   // Soft outline where floor meets wall (readability).
   g.strokeStyle = pal.outline;
   g.lineWidth = 2;
