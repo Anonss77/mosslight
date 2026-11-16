@@ -27,6 +27,19 @@ export function blobShadow(radius, opacity = 0.32) {
   return m;
 }
 
+// v7: red ring on the ground under an enemy — the one marker that makes
+// an enemy readable at a glance from above, even when its body blends
+// with the decor. Decor (flowers, mushrooms, grass) never has a ring.
+export function enemyRing(r) {
+  const m = new THREE.Mesh(
+    new THREE.RingGeometry(r * 0.8, r, 24),
+    new THREE.MeshBasicMaterial({ color: 0xff2a2a, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  m.rotation.x = -Math.PI / 2;
+  m.position.y = 0.04;
+  return m;
+}
+
 // ---- Neri's lantern: a hand lantern that hangs from the GLB hand slot.
 export function makeGlowTexture() {
   const cv = document.createElement('canvas');
@@ -97,6 +110,9 @@ export function buildMoth() {
 }
 
 // ---- Puffcap: pink mushroom with mint spots ----
+// v7: the face moved from the stem front (hidden under the cap overhang
+// from above) to the TOP of the cap — eyes + smile sit on the cap's
+// upper-front slope, so they read from the 38 deg camera.
 export function buildPuffcap() {
   const g = new THREE.Group();
   const stem = mesh(new THREE.CylinderGeometry(0.24, 0.32, 0.55, 10), lam(0xfff3c4), 0, 0.28, 0);
@@ -104,18 +120,22 @@ export function buildPuffcap() {
   const cap = mesh(new THREE.SphereGeometry(0.55, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xff7fb0), 0, 0.5, 0);
   cap.scale.y = 0.75;
   g.add(cap);
-  for (const [x, y, z, r] of [[-0.25, 0.82, 0.25, 0.1], [0.28, 0.78, 0.18, 0.12], [0.05, 0.88, -0.3, 0.09]]) {
+  // Mint spots kept on the BACK of the cap so they never collide with the face.
+  for (const [x, y, z, r] of [[-0.3, 0.85, -0.15, 0.1], [0.32, 0.75, -0.05, 0.12], [0.05, 0.88, -0.3, 0.09]]) {
     g.add(mesh(new THREE.SphereGeometry(r, 8, 6), lam(0xa5e37a), x, y, z));
   }
   g.add(mesh(new THREE.SphereGeometry(0.09, 8, 6), lam(0x3a2a20), -0.16, 0.06, 0.28));
   g.add(mesh(new THREE.SphereGeometry(0.09, 8, 6), lam(0x3a2a20), 0.16, 0.06, 0.28));
   const eyeW = lam(0xffffff), pup = lam(0x1a1a1a);
   for (const sx of [-1, 1]) {
-    g.add(mesh(new THREE.SphereGeometry(0.12, 10, 8), eyeW, sx * 0.14, 0.44, 0.24));
-    g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), pup, sx * 0.14, 0.44, 0.34));
+    g.add(mesh(new THREE.SphereGeometry(0.13, 10, 8), eyeW, sx * 0.16, 0.87, 0.18));
+    g.add(mesh(new THREE.SphereGeometry(0.065, 8, 6), pup, sx * 0.16, 0.93, 0.23));
   }
-  g.add(mesh(new THREE.BoxGeometry(0.16, 0.035, 0.04), pup, 0, 0.3, 0.3));
+  const smile = mesh(new THREE.BoxGeometry(0.16, 0.035, 0.04), pup, 0, 0.85, 0.3);
+  smile.rotation.x = -0.55;
+  g.add(smile);
   g.add(blobShadow(0.5));
+  g.add(enemyRing(0.66));
   return { group: g, parts: { cap, stem } };
 }
 
@@ -144,15 +164,18 @@ export function buildTinket() {
     }
   }
   const eyeW = lam(0xffffff), pup = lam(0x1a1a1a);
+  // v7: eyes moved to the TOP of the head (were on the front face, hidden
+  // from above) and made bigger — they read from the 38 deg camera.
   for (const sx of [-1, 1]) {
-    g.add(mesh(new THREE.SphereGeometry(0.1, 10, 8), eyeW, sx * 0.1, 0.38, 0.7));
-    g.add(mesh(new THREE.SphereGeometry(0.05, 8, 6), pup, sx * 0.1, 0.38, 0.79));
+    g.add(mesh(new THREE.SphereGeometry(0.13, 10, 8), eyeW, sx * 0.11, 0.53, 0.6));
+    g.add(mesh(new THREE.SphereGeometry(0.065, 8, 6), pup, sx * 0.11, 0.57, 0.66));
     const an = mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.36, 5), lam(0x6a4a2a), sx * 0.14, 0.56, 0.74);
     an.rotation.x = -0.7; an.rotation.z = -sx * 0.3;
     g.add(an);
     g.add(mesh(new THREE.SphereGeometry(0.05, 6, 5), lam(0x35c9d0), sx * 0.22, 0.68, 0.84));
   }
   g.add(blobShadow(0.45));
+  g.add(enemyRing(0.62));
   return { group: g, parts: { body, key } };
 }
 
@@ -176,15 +199,19 @@ export function buildBrambler() {
     g.add(thorn);
   }
   const eyeW = lam(0xffffff), pup = lam(0x1a1a1a);
+  // v7: the angry face moved to the TOP of the stump (was on the front
+  // face, hidden from above) — eyes on the top disc's front edge, brows
+  // just under the rim, mouth lying on the disc.
   for (const sx of [-1, 1]) {
-    g.add(mesh(new THREE.SphereGeometry(0.11, 10, 8), eyeW, sx * 0.15, 0.62, 0.4));
-    g.add(mesh(new THREE.SphereGeometry(0.055, 8, 6), pup, sx * 0.15, 0.62, 0.5));
-    const brow = mesh(new THREE.BoxGeometry(0.2, 0.045, 0.04), pup, sx * 0.15, 0.78, 0.42);
+    g.add(mesh(new THREE.SphereGeometry(0.11, 10, 8), eyeW, sx * 0.16, 0.95, 0.3));
+    g.add(mesh(new THREE.SphereGeometry(0.055, 8, 6), pup, sx * 0.16, 0.98, 0.34));
+    const brow = mesh(new THREE.BoxGeometry(0.2, 0.045, 0.04), pup, sx * 0.15, 0.8, 0.44);
     brow.rotation.z = -sx * 0.45;
     g.add(brow);
   }
-  g.add(mesh(new THREE.BoxGeometry(0.14, 0.035, 0.04), pup, 0, 0.46, 0.44));
+  g.add(mesh(new THREE.BoxGeometry(0.14, 0.035, 0.04), pup, 0, 0.97, 0.36));
   g.add(blobShadow(0.55));
+  g.add(enemyRing(0.66));
   return { group: g, parts: { stump, top } };
 }
 
@@ -221,6 +248,9 @@ export function buildBoss() {
   glow.rotation.x = -Math.PI / 2;
   glow.position.y = 0.03;
   g.add(glow);
+  const ring = enemyRing(2.3);
+  ring.position.y = 0.06; // above the glow disc, no z-fight
+  g.add(ring);
   return { group: g, parts: { body, dome, rim, clapper, glow } };
 }
 

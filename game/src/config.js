@@ -213,7 +213,11 @@ export const AREAS = [
 // ---- 3D camera / render ----
 export const CAM = {
   fov: 50, // vertical degrees
-  tiltDeg: 55, // camera looks down 55 deg below horizontal
+  tiltDeg: 38, // camera looks down 38 deg below horizontal (v7: was 55 —
+  // at 55 deg Neri read as "just a purple hat" — her face + robe were
+  // hidden under the hat brim; at 38 they show. Sky band at the top of
+  // the frame when Neri is near the north edge is the area sky colour,
+  // not void — the ground still fills every frame below the tree line.
   dist: 16, // world units from the target point
   targetHeight: 1.4, // world units above the floor (Neri's chest)
   neriHeight: 3.4, // world units tall (renders ~130px at 1280x720;

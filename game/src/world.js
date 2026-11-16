@@ -47,7 +47,33 @@ export function createWorld(canvas) {
   let chestMeshes = [];
   let statueMeshes = [];
 
-  // ---- ground baking (one canvas texture for the whole open field) ----
+  // v7: gradient sky — at the 38 deg camera the top of the frame shows
+  // sky when Neri is near the north edge; a flat colour read as an empty
+  // brown band (Cinder), a vertical gradient reads as sky instead.
+  let skyTex = null;
+  function shade(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.min(255, Math.round(((n >> 16) & 255) * f));
+    const g = Math.min(255, Math.round(((n >> 8) & 255) * f));
+    const b = Math.min(255, Math.round((n & 255) * f));
+    return `rgb(${r},${g},${b})`;
+  }
+  function setSky() {
+    const pal = AREAS[area];
+    const cv = document.createElement('canvas');
+    cv.width = 4; cv.height = 256;
+    const ctx = cv.getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, shade(pal.sky, 0.5));
+    grad.addColorStop(0.62, pal.sky);
+    grad.addColorStop(1, shade(pal.sky, 1.5));
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 4, 256);
+    if (skyTex) skyTex.dispose();
+    skyTex = new THREE.CanvasTexture(cv);
+    skyTex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = skyTex;
+  }
   function bakeFloor() {
     const pal = AREAS[area];
     const cv = document.createElement('canvas');
@@ -183,7 +209,10 @@ export function createWorld(canvas) {
       else if (t < FW + FH) { x = FW - 0.6 - jd; z = t - FW + jt; }
       else if (t < FW * 2 + FH) { x = FW - (t - FW - FH) + jt; z = FH - 0.6 - jd; }
       else { x = 0.6 + jd; z = FH - (t - FW * 2 - FH) + jt; }
-      const s = 0.8 + tileHash(i * 3, area) * 1.2;
+      // v7: the north row (the far horizon the 38 deg camera looks at) is
+      // 2.2x taller, so the top of the frame shows a forest silhouette
+      // under the gradient sky instead of a flat empty band.
+      const s = (0.8 + tileHash(i * 3, area) * 1.2) * (t < FW ? 2.2 : 1);
       m4.compose(pv.set(x, 0.45 * s, z), q, sv.set(s, s, s));
       trunks.setMatrixAt(i, m4);
       m4.compose(pv.set(x, 1.25 * s, z), q, sv.set(s, s, s));
@@ -213,6 +242,10 @@ export function createWorld(canvas) {
 
   // ---- entity mesh pools ----
   const enemyMeshes = new Map(); // id -> {group, parts, type}
+  const hpBars = new Map(); // enemy id -> {group, fill, fillW}; v7: small HP
+  // bar above every enemy, billboarded to the camera, so an enemy is
+  // readable at a glance even when its body blends with the decor.
+  let bossHpBar = null;
   const lootMeshes = new Map(); // id -> {group, parts, kind}
   const pickupMeshes = new Map(); // id -> {group, parts, kind}
   const projPool = [];
@@ -373,6 +406,37 @@ export function createWorld(canvas) {
     d.tex.needsUpdate = true;
   }
 
+  // v7: enemy HP bar — dark backing + fill that shrinks from the right.
+  // The group is billboarded in sync() (quaternion copied from the camera),
+  // so its local +x is screen-right and the fill stays left-anchored.
+  function makeHpBar(w) {
+    const g = new THREE.Group();
+    const bg = new THREE.Mesh(
+      new THREE.PlaneGeometry(w, 0.15),
+      new THREE.MeshBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.85, depthTest: false }),
+    );
+    bg.renderOrder = 5;
+    const fillW = w - 0.06;
+    const fill = new THREE.Mesh(
+      new THREE.PlaneGeometry(fillW, 0.1),
+      new THREE.MeshBasicMaterial({ color: 0x7fe07f, transparent: true, opacity: 0.95, depthTest: false }),
+    );
+    fill.renderOrder = 6;
+    fill.position.z = 0.001;
+    g.add(bg, fill);
+    g.visible = false;
+    scene.add(g);
+    return { group: g, fill, fillW };
+  }
+
+  function updateHpBar(hb, frac) {
+    const f = Math.max(0, Math.min(1, frac));
+    hb.fill.scale.x = Math.max(0.001, f);
+    hb.fill.position.x = -(1 - f) * hb.fillW / 2;
+    hb.fill.material.color.setHex(f > 0.5 ? 0x7fe07f : f > 0.25 ? 0xffc94d : 0xff4f4f);
+    hb.group.visible = true;
+  }
+
   function getTelegraph(color, radius) {
     let t = telegraphPool.find((e) => !e.inUse);
     if (!t) {
@@ -394,7 +458,7 @@ export function createWorld(canvas) {
     bakeFloor();
     buildProps();
     buildChestsAndStatues();
-    scene.background = new THREE.Color(AREAS[0].sky);
+    setSky();
   }
 
   function setArea(a) {
@@ -402,7 +466,7 @@ export function createWorld(canvas) {
     area = a;
     bakeFloor();
     buildProps();
-    scene.background = new THREE.Color(AREAS[a].sky);
+    setSky();
   }
 
   function pxPerUnit() {
@@ -480,9 +544,19 @@ export function createWorld(canvas) {
       } else {
         em.group.traverse((o) => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(0x000000); });
       }
+      // v7 HP bar above the head, billboarded to the camera.
+      let hb = hpBars.get(e.id);
+      if (!hb) { hb = makeHpBar(1.15); hpBars.set(e.id, hb); }
+      hb.group.position.set(toX(e.x), 1.95, toZ(e.y));
+      hb.group.quaternion.copy(camera.quaternion);
+      updateHpBar(hb, e.hp / e.maxHp);
     }
     for (const [id, em] of enemyMeshes) {
-      if (!seenEnemies.has(id)) { scene.remove(em.group); enemyMeshes.delete(id); }
+      if (!seenEnemies.has(id)) {
+        scene.remove(em.group); enemyMeshes.delete(id);
+        const hb = hpBars.get(id);
+        if (hb) { scene.remove(hb.group); hpBars.delete(id); }
+      }
     }
 
     if (sim.boss) {
@@ -494,6 +568,10 @@ export function createWorld(canvas) {
       bossMesh.group.rotation.z = b.telegraphing ? Math.sin(sim.time * 20) * 0.04 : 0;
       bossMesh.group.visible = true;
       bossMesh.parts.clapper.position.y = 0.25 + Math.sin(sim.time * 6) * 0.08;
+      if (!bossHpBar) bossHpBar = makeHpBar(2.8);
+      bossHpBar.group.position.set(toX(b.x), 5.05, toZ(b.y));
+      bossHpBar.group.quaternion.copy(camera.quaternion);
+      updateHpBar(bossHpBar, b.hp / b.maxHp);
       if (b.flashT > 0) {
         bossMesh.parts.body.material.emissive.setHex(0x888888);
       } else {
@@ -501,6 +579,7 @@ export function createWorld(canvas) {
       }
     } else if (bossMesh) {
       bossMesh.group.visible = false;
+      if (bossHpBar) bossHpBar.group.visible = false;
     }
 
     const seenLoot = new Set();

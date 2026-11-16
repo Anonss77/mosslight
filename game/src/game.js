@@ -1425,10 +1425,13 @@ export class Game {
     if (shot === 'start') return this.state === 'title';
     if (this.state !== 'playing') return false;
     if (shot === 'combat') {
-      return this.wave >= 1 && this.wave <= 3 && this.enemies.length >= 8 && this.loot.length >= 1;
+      // v7: mid-wave only (waveT counts down from 50, so <= 25 means at
+      // least 25 s elapsed) — the shot must show a crowded field, not the
+      // first few enemies of a fresh wave.
+      return this.wave >= 1 && this.wave <= 3 && this.waveT <= 25 && this.enemies.length >= 8 && this.loot.length >= 1;
     }
     if (shot === 'cinder') {
-      return this.wave >= 4 && this.wave <= 6 && this.enemies.length >= 8;
+      return this.wave >= 4 && this.wave <= 6 && this.waveT <= 25 && this.enemies.length >= 8;
     }
     if (shot === 'boss') {
       if (this.wave !== 8 || !this.boss) return false;
