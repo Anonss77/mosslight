@@ -1,10 +1,7 @@
-// Mosslight v4 — 3D models. Neri herself is a real rigged GLB asset
-// (assets/neri.glb — KayKit Mage, CC0, loaded by world.js); everything
-// else here is built from Three.js primitives in code, no textures from
-// files. Every builder returns a THREE.Group with named parts so world.js
-// can animate it (hop squash, key spin, boss tilt, lantern flicker).
-// Pure functions of type: variation (scale/rotation) is applied by the
-// caller with the visual RNG.
+// Mosslight v5 — 3D models from Three.js primitives (Neri is the real
+// rigged GLB in assets/neri.glb). Every builder returns a Group with
+// named parts so world.js can animate it. Pure functions of type;
+// variation (scale/rotation) is applied by the caller with the visual RNG.
 
 import * as THREE from 'three';
 
@@ -20,8 +17,6 @@ function mesh(geo, mat, x = 0, y = 0, z = 0) {
   return m;
 }
 
-// Soft dark disc under an entity (cheap fake shadow; real shadow maps are
-// off — too slow in the headless software renderer).
 export function blobShadow(radius, opacity = 0.32) {
   const m = new THREE.Mesh(
     new THREE.CircleGeometry(radius, 20),
@@ -33,9 +28,6 @@ export function blobShadow(radius, opacity = 0.32) {
 }
 
 // ---- Neri's lantern: a hand lantern that hangs from the GLB hand slot.
-// Neri herself is a real rigged GLB (assets/neri.glb, KayKit Mage, CC0) —
-// code primitives could never look like a person, so the hero is an asset
-// and only her lantern, aura ring and moth companion are built in code.
 export function makeGlowTexture() {
   const cv = document.createElement('canvas');
   cv.width = 128; cv.height = 128;
@@ -52,7 +44,6 @@ export function makeGlowTexture() {
 }
 
 export function buildLantern() {
-  // Model-space units: the hand slot is the origin; the cage hangs below it.
   const g = new THREE.Group();
   const brass = lam(0x8a6a2a);
   const handle = mesh(new THREE.TorusGeometry(0.09, 0.02, 8, 14), brass, 0, 0, 0);
@@ -71,7 +62,6 @@ export function buildLantern() {
   g.add(flame);
   g.add(mesh(new THREE.ConeGeometry(0.13, 0.09, 10), brass, 0, -0.02, 0));
   g.add(mesh(new THREE.CylinderGeometry(0.13, 0.1, 0.04, 10), brass, 0, -0.28, 0));
-  // Real point light inside the flame (the dungeon's warm light).
   const light = new THREE.PointLight(0xffb830, 26, 11, 1.6);
   light.position.set(0, -0.16, 0);
   g.add(light);
@@ -85,7 +75,6 @@ export function buildLantern() {
   return { group: g, parts: { light, glow, flame } };
 }
 
-// Soft amber ring under Neri's feet (the "find her instantly" ring).
 export function buildAuraRing() {
   const aura = new THREE.Mesh(
     new THREE.RingGeometry(0.55, 0.95, 28),
@@ -96,7 +85,6 @@ export function buildAuraRing() {
   return aura;
 }
 
-// Moth companion: tiny pale body + two flat wings, floats beside Neri.
 export function buildMoth() {
   const moth = new THREE.Group();
   moth.add(mesh(new THREE.SphereGeometry(0.09, 8, 6), lam(0x8a7ac8), 0, 0, 0));
@@ -116,15 +104,17 @@ export function buildPuffcap() {
   const cap = mesh(new THREE.SphereGeometry(0.55, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xff7fb0), 0, 0.5, 0);
   cap.scale.y = 0.75;
   g.add(cap);
-  // Mint spots on the cap.
   for (const [x, y, z, r] of [[-0.25, 0.82, 0.25, 0.1], [0.28, 0.78, 0.18, 0.12], [0.05, 0.88, -0.3, 0.09]]) {
     g.add(mesh(new THREE.SphereGeometry(r, 8, 6), lam(0xa5e37a), x, y, z));
   }
-  // Tiny feet + eyes.
   g.add(mesh(new THREE.SphereGeometry(0.09, 8, 6), lam(0x3a2a20), -0.16, 0.06, 0.28));
   g.add(mesh(new THREE.SphereGeometry(0.09, 8, 6), lam(0x3a2a20), 0.16, 0.06, 0.28));
-  g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), lam(0x1a1a1a), -0.12, 0.42, 0.26));
-  g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), lam(0x1a1a1a), 0.12, 0.42, 0.26));
+  const eyeW = lam(0xffffff), pup = lam(0x1a1a1a);
+  for (const sx of [-1, 1]) {
+    g.add(mesh(new THREE.SphereGeometry(0.12, 10, 8), eyeW, sx * 0.14, 0.44, 0.24));
+    g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), pup, sx * 0.14, 0.44, 0.34));
+  }
+  g.add(mesh(new THREE.BoxGeometry(0.16, 0.035, 0.04), pup, 0, 0.3, 0.3));
   g.add(blobShadow(0.5));
   return { group: g, parts: { cap, stem } };
 }
@@ -136,9 +126,8 @@ export function buildTinket() {
   const body = mesh(new THREE.SphereGeometry(0.42, 14, 10), brass, 0, 0.32, 0);
   body.scale.set(1, 0.62, 1.35);
   g.add(body);
-  const head = mesh(new THREE.SphereGeometry(0.22, 10, 8), lam(0x6a4a2a), 0, 0.3, 0.55);
+  const head = mesh(new THREE.SphereGeometry(0.26, 10, 8), lam(0x6a4a2a), 0, 0.3, 0.55);
   g.add(head);
-  // Wind-up key on the back (spins while it walks).
   const key = new THREE.Group();
   key.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8), lam(0x35c9d0), 0, 0.12, 0));
   key.children[0].rotation.x = Math.PI / 2;
@@ -146,7 +135,6 @@ export function buildTinket() {
   key.add(bar);
   key.position.set(0, 0.55, -0.35);
   g.add(key);
-  // Six thin legs.
   for (const sx of [-1, 1]) {
     for (const [lz, la] of [[0.3, 0.5], [0, 0], [-0.3, -0.5]]) {
       const leg = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 6), lam(0x6a4a2a), sx * 0.42, 0.16, lz);
@@ -155,8 +143,15 @@ export function buildTinket() {
       g.add(leg);
     }
   }
-  g.add(mesh(new THREE.SphereGeometry(0.05, 8, 6), lam(0x1a1a1a), -0.09, 0.36, 0.72));
-  g.add(mesh(new THREE.SphereGeometry(0.05, 8, 6), lam(0x1a1a1a), 0.09, 0.36, 0.72));
+  const eyeW = lam(0xffffff), pup = lam(0x1a1a1a);
+  for (const sx of [-1, 1]) {
+    g.add(mesh(new THREE.SphereGeometry(0.1, 10, 8), eyeW, sx * 0.1, 0.38, 0.7));
+    g.add(mesh(new THREE.SphereGeometry(0.05, 8, 6), pup, sx * 0.1, 0.38, 0.79));
+    const an = mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.36, 5), lam(0x6a4a2a), sx * 0.14, 0.56, 0.74);
+    an.rotation.x = -0.7; an.rotation.z = -sx * 0.3;
+    g.add(an);
+    g.add(mesh(new THREE.SphereGeometry(0.05, 6, 5), lam(0x35c9d0), sx * 0.22, 0.68, 0.84));
+  }
   g.add(blobShadow(0.45));
   return { group: g, parts: { body, key } };
 }
@@ -168,7 +163,6 @@ export function buildBrambler() {
   g.add(stump);
   const top = mesh(new THREE.CylinderGeometry(0.48, 0.44, 0.12, 10), lam(0x6a452c), 0, 0.9, 0);
   g.add(top);
-  // Leafy crown.
   const leafM = lam(0x6fe08a);
   for (const [x, y, z, ry] of [[-0.3, 1.05, 0.1, 0.5], [0.3, 1.08, -0.05, -0.4], [0, 1.15, 0.25, 0.1], [0.05, 1.0, -0.3, 2.6]]) {
     const leaf = mesh(new THREE.ConeGeometry(0.22, 0.6, 6), leafM, x, y, z);
@@ -176,14 +170,20 @@ export function buildBrambler() {
     leaf.rotation.x = 0.3;
     g.add(leaf);
   }
-  // Orange thorns on the sides.
-  for (const [x, z, rz] of [[-0.48, 0.1, 1.1], [0.48, -0.1, -1.1], [-0.4, -0.35, 0.7]]) {
+  for (const [x, z, rz] of [[-0.48, 0.1, 1.1], [0.48, -0.1, -1.1], [-0.4, -0.35, 0.7], [0.42, 0.32, -0.8], [-0.1, 0.48, 1.9]]) {
     const thorn = mesh(new THREE.ConeGeometry(0.09, 0.35, 6), lam(0xf59b42), x, 0.55, z);
     thorn.rotation.z = rz;
     g.add(thorn);
   }
-  g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), lam(0x1a1a1a), -0.14, 0.6, 0.42));
-  g.add(mesh(new THREE.SphereGeometry(0.06, 8, 6), lam(0x1a1a1a), 0.14, 0.6, 0.42));
+  const eyeW = lam(0xffffff), pup = lam(0x1a1a1a);
+  for (const sx of [-1, 1]) {
+    g.add(mesh(new THREE.SphereGeometry(0.11, 10, 8), eyeW, sx * 0.15, 0.62, 0.4));
+    g.add(mesh(new THREE.SphereGeometry(0.055, 8, 6), pup, sx * 0.15, 0.62, 0.5));
+    const brow = mesh(new THREE.BoxGeometry(0.2, 0.045, 0.04), pup, sx * 0.15, 0.78, 0.42);
+    brow.rotation.z = -sx * 0.45;
+    g.add(brow);
+  }
+  g.add(mesh(new THREE.BoxGeometry(0.14, 0.035, 0.04), pup, 0, 0.46, 0.44));
   g.add(blobShadow(0.55));
   return { group: g, parts: { stump, top } };
 }
@@ -198,19 +198,22 @@ export function buildBoss() {
   g.add(body);
   const dome = mesh(new THREE.SphereGeometry(0.55, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), glass, 0, 3.45, 0);
   g.add(dome);
-  // Gold rim + crown + clapper.
   const rim = mesh(new THREE.TorusGeometry(1.7, 0.2, 10, 22), gold(), 0, 0.35, 0);
   rim.rotation.x = Math.PI / 2;
   g.add(rim);
   g.add(mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.5, 10), gold(), 0, 4.15, 0));
   const clapper = mesh(new THREE.SphereGeometry(0.3, 10, 8), gold(), 0, 0.25, 0);
   g.add(clapper);
-  // Tiny face inside the glass.
-  g.add(mesh(new THREE.SphereGeometry(0.11, 8, 6), lam(0x1a2a2a), -0.35, 2.1, 1.55));
-  g.add(mesh(new THREE.SphereGeometry(0.11, 8, 6), lam(0x1a2a2a), 0.35, 2.1, 1.55));
-  const mouth = mesh(new THREE.BoxGeometry(0.3, 0.06, 0.05), lam(0x1a2a2a), 0, 1.75, 1.6);
+  const eyeW = lam(0xffffff), pup = basic(0x76dde0);
+  for (const sx of [-1, 1]) {
+    g.add(mesh(new THREE.SphereGeometry(0.2, 10, 8), eyeW, sx * 0.38, 2.15, 0.95));
+    g.add(mesh(new THREE.SphereGeometry(0.1, 8, 6), pup, sx * 0.38, 2.15, 1.12));
+  }
+  const mouth = mesh(new THREE.BoxGeometry(0.5, 0.08, 0.05), lam(0x1a2a2a), 0, 1.7, 1.2);
   g.add(mouth);
-  // Bright rim light: a soft cyan glow disc under the bell.
+  const band = mesh(new THREE.TorusGeometry(1.02, 0.08, 8, 22), gold(), 0, 2.0, 0);
+  band.rotation.x = Math.PI / 2;
+  g.add(band);
   const glow = new THREE.Mesh(
     new THREE.CircleGeometry(2.0, 24),
     new THREE.MeshBasicMaterial({ color: 0x76dde0, transparent: true, opacity: 0.18, depthWrite: false }),
@@ -222,7 +225,6 @@ export function buildBoss() {
 }
 
 // ---- Items (real game items, readable at a glance) ----
-// Gold coin: a spinning disc with a bright inner face.
 export function buildCoin() {
   const g = new THREE.Group();
   const disc = mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.09, 18), gold(), 0, 0, 0);
@@ -232,7 +234,6 @@ export function buildCoin() {
   return { group: g, parts: { disc } };
 }
 
-// Red heart: extruded heart shape + white shine bead.
 export function buildHeart() {
   const s = new THREE.Shape();
   s.moveTo(0, 0.32);
@@ -249,7 +250,6 @@ export function buildHeart() {
   return { group: g, parts: { heart } };
 }
 
-// Blue shard: a faceted, elongated octahedron.
 export function buildShard() {
   const g = new THREE.Group();
   const shard = mesh(new THREE.OctahedronGeometry(0.4, 0), phong(0x5fa8ff, { shininess: 140, flatShading: true, emissive: 0x0a2a5a }), 0, 0.45, 0);
@@ -258,7 +258,6 @@ export function buildShard() {
   return { group: g, parts: { shard } };
 }
 
-// Wooden chest with gold bands and a lock.
 export function buildChest() {
   const g = new THREE.Group();
   const wood = lam(0x8a5a3a);
@@ -273,7 +272,6 @@ export function buildChest() {
   return { group: g, parts: { lid } };
 }
 
-// Buff statue: pale obelisk with a glowing rune ring.
 export function buildStatue() {
   const g = new THREE.Group();
   g.add(mesh(new THREE.BoxGeometry(0.55, 1.5, 0.55), lam(0xb0a5d8), 0, 0.75, 0));
@@ -357,12 +355,21 @@ export function buildProp(area, kind) {
     cap.scale.y = 0.7;
     g.add(cap);
     g.add(mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.28, 8), lam(0xd8e8c8), 0, 0.14, 0));
+  } else if (kind === 'tree') {
+    g.add(mesh(new THREE.CylinderGeometry(0.14, 0.22, 0.9, 7), lam(0x6a452c), 0, 0.45, 0));
+    g.add(mesh(new THREE.SphereGeometry(0.62, 10, 8), lam(0x4a9a4a), 0, 1.25, 0));
+    g.add(mesh(new THREE.SphereGeometry(0.42, 10, 8), lam(0x5da85a), 0.35, 0.95, 0.15));
+  } else if (kind === 'rock') {
+    for (const [x, z, s] of [[0, 0, 1], [-0.3, 0.15, 0.6], [0.28, -0.12, 0.7]]) {
+      const r = mesh(new THREE.DodecahedronGeometry(0.4 * s, 0), lam(0x8a8a96), x, 0.22 * s, z);
+      r.rotation.y = s * 2;
+      g.add(r);
+    }
   }
   return { group: g, parts: {} };
 }
 
 // ---- Effect meshes ----
-// Big white crescent slash with an orange glow (Crescent Cut).
 export function buildSlash() {
   const g = new THREE.Group();
   const arc = new THREE.Mesh(
@@ -382,7 +389,6 @@ export function buildSlash() {
   return { group: g, parts: { arc, glow } };
 }
 
-// Ember fire patch: flat glow disc + flame tongues.
 export function buildEmberPatch() {
   const g = new THREE.Group();
   const disc = new THREE.Mesh(
@@ -406,7 +412,6 @@ export function buildEmberPatch() {
   return { group: g, parts: { disc, tongues } };
 }
 
-// Starfall streak: a falling gold rod.
 export function buildStreak() {
   const g = new THREE.Group();
   g.add(mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.6, 6), basic(0xffd76a), 0, 0, 0));
@@ -414,7 +419,6 @@ export function buildStreak() {
   return { group: g, parts: {} };
 }
 
-// Flat floor telegraph ring (boss ring, brambler slam, echo markers).
 export function buildTelegraphRing(color, radius) {
   const m = new THREE.Mesh(
     new THREE.RingGeometry(radius * 0.82, radius, 40),
@@ -433,7 +437,6 @@ export function buildTelegraphRing(color, radius) {
   return { group: g, parts: { ring: m, fill } };
 }
 
-// Thin aim line (tinket telegraph): a long flat cyan bar.
 export function buildAimLine() {
   const m = new THREE.Mesh(
     new THREE.PlaneGeometry(1, 0.14),

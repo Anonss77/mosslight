@@ -1,9 +1,7 @@
-// Mosslight v4 — the 3D world: renderer, camera, lights, floor, walls,
-// props, and the frame-by-frame sync from simulation state to meshes.
-// The simulation lives in px units (768x576 world, 16px tiles); this file
-// maps px to world units (1 unit = 16px) and owns every visible object.
-// Nothing here consumes the run RNG: decor uses its own visual stream,
-// re-seeded identically per area bake, so the render never shifts gameplay.
+// Mosslight v5 — 3D world: renderer, camera, lights, floor, walls,
+// props, sync sim->meshes. Sim in px (768x576, 16px tiles); 1 unit=16px.
+// Decor uses its own visual stream, re-seeded per area bake: the render
+// never shifts gameplay.
 
 import * as THREE from 'three';
 import { GRID_W, GRID_H, TILE, WORLD_W, WORLD_H, AREAS, CAM } from './config.js';
@@ -40,14 +38,32 @@ export function createWorld(canvas) {
   const sun = new THREE.DirectionalLight(0xfff2d0, 2.4);
   sun.position.set(6, 14, 4);
   scene.add(sun);
-  // Big dark ground far below the dungeon so the camera never sees void.
   const farGround = new THREE.Mesh(
     new THREE.PlaneGeometry(400, 400),
-    new THREE.MeshLambertMaterial({ color: 0x0e2a24 }),
+    new THREE.MeshLambertMaterial({ color: 0xffffff }),
   );
   farGround.rotation.x = -Math.PI / 2;
   farGround.position.set(GRID_W / 2, -0.08, GRID_H / 2);
   scene.add(farGround);
+  function bakeGround() {
+    const p = AREAS[area], c = document.createElement('canvas');
+    c.width = c.height = 128;
+    const x = c.getContext('2d');
+    for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) {
+      x.fillStyle = (a + b) % 2 ? p.floor : p.floorAlt;
+      x.fillRect(a * 16, b * 16, 16, 16);
+    }
+    x.fillStyle = p.highlight; x.globalAlpha = 0.35;
+    for (let i = 0; i < 48; i++) x.fillRect((i * 53) % 128, (i * 97) % 128, 2, 2);
+    x.globalAlpha = 1;
+    const t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(40, 40); t.anisotropy = 4;
+    if (farGround.material.map) farGround.material.map.dispose();
+    farGround.material.map = t;
+    farGround.material.needsUpdate = true;
+  }
 
   let dungeon = null;
   let area = 0;
@@ -72,7 +88,6 @@ export function createWorld(canvas) {
         if (isFloor(dungeon, tx, ty)) {
           ctx.fillStyle = (tx + ty) % 2 === 0 ? pal.floor : pal.floorAlt;
           ctx.fillRect(px, py, TILE, TILE);
-          // Two speckles at fixed hash offsets (no RNG).
           const h1 = tileHash(tx, ty), h2 = tileHash(ty, tx);
           ctx.fillStyle = pal.highlight;
           ctx.globalAlpha = 0.25;
@@ -80,14 +95,18 @@ export function createWorld(canvas) {
           ctx.fillRect(px + 9 + h2 * 4, py + 10 + h1 * 3, 2, 2);
           ctx.globalAlpha = 1;
         } else {
-          ctx.fillStyle = pal.outline;
+          ctx.fillStyle = (tx + ty) % 2 === 0 ? pal.outline : pal.wall;
           ctx.fillRect(px, py, TILE, TILE);
+          const h1 = tileHash(tx, ty);
+          ctx.fillStyle = pal.highlight;
+          ctx.globalAlpha = 0.2;
+          ctx.fillRect(px + 3 + h1 * 8, py + 4 + h1 * 7, 2, 2);
+          ctx.globalAlpha = 1;
         }
       }
     }
     // Area features, seeded (same seed every bake -> same layout).
     if (area === 0) {
-      // Turquoise ponds + pink flower dots.
       for (let i = 0; i < 3; i++) {
         const room = vrng.pick(dungeon.rooms);
         const cx = (room.x + 1 + vrng.range(1, Math.max(1.1, room.w - 2))) * TILE;
@@ -105,7 +124,6 @@ export function createWorld(canvas) {
           (room.y + vrng.range(0.5, room.h - 0.5)) * TILE, 3, 3);
       }
     } else if (area === 1) {
-      // Cyan machinery shards + forge glow patches.
       for (let i = 0; i < 26; i++) {
         const room = vrng.pick(dungeon.rooms);
         ctx.fillStyle = vrng.chance(0.5) ? pal.machinery : pal.forge;
@@ -116,7 +134,6 @@ export function createWorld(canvas) {
         ctx.globalAlpha = 1;
       }
     } else {
-      // Pale crystal dots + lime fungus dots.
       for (let i = 0; i < 34; i++) {
         const room = vrng.pick(dungeon.rooms);
         ctx.fillStyle = vrng.chance(0.55) ? pal.crystal : pal.fungus;
@@ -159,7 +176,7 @@ export function createWorld(canvas) {
         if (near) spots.push([tx + 0.5, ty + 0.5]);
       }
     }
-    const box = new THREE.BoxGeometry(1, 1.25, 1);
+    const box = new THREE.BoxGeometry(1, 1, 1);
     const mat = new THREE.MeshLambertMaterial({ color: pal.wall });
     if (wallMesh) { scene.remove(wallMesh); wallMesh.dispose(); }
     if (wallTopMesh) { scene.remove(wallTopMesh); wallTopMesh.dispose(); }
@@ -168,10 +185,12 @@ export function createWorld(canvas) {
     const topMat = new THREE.MeshLambertMaterial({ color: pal.wallTop });
     wallTopMesh = new THREE.InstancedMesh(topBox, topMat, spots.length);
     const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion(), pv = new THREE.Vector3(), sv = new THREE.Vector3();
     spots.forEach(([x, z], i) => {
-      m4.makeTranslation(x, 0.62, z);
+      const h = 0.5 + tileHash((x * 7) | 0, (z * 7) | 0) * 0.55;
+      m4.compose(pv.set(x, h / 2, z), q, sv.set(1, h, 1));
       wallMesh.setMatrixAt(i, m4);
-      m4.makeTranslation(x, 1.28, z);
+      m4.compose(pv.set(x, h + 0.05, z), q, sv.set(1.04, 0.1, 1.04));
       wallTopMesh.setMatrixAt(i, m4);
     });
     wallMesh.instanceMatrix.needsUpdate = true;
@@ -181,9 +200,9 @@ export function createWorld(canvas) {
 
   // ---- props (visual only, rebuilt per area from a fixed seed) ----
   const PROP_KINDS = [
-    ['flower', 'tuft', 'pond', 'mushroom'],
-    ['anvil', 'gear', 'furnace', 'crystal'],
-    ['crystal', 'obelisk', 'starflower', 'fungus'],
+    ['flower', 'tuft', 'pond', 'mushroom', 'tree'],
+    ['anvil', 'gear', 'furnace', 'crystal', 'rock'],
+    ['crystal', 'obelisk', 'starflower', 'fungus', 'rock'],
   ];
   function buildProps() {
     scene.remove(propGroup);
@@ -192,7 +211,7 @@ export function createWorld(canvas) {
     const vrng = makeRng(0x51ab3f ^ (area * 7919 + 13));
     const kinds = PROP_KINDS[area];
     for (const room of dungeon.rooms) {
-      const n = room.w * room.h >= 48 ? 4 : room.w * room.h >= 30 ? 3 : 2;
+      const n = room.w * room.h >= 48 ? 6 : room.w * room.h >= 30 ? 4 : 3;
       for (let i = 0; i < n; i++) {
         const tx = room.x + 1 + vrng.int(0, Math.max(0, room.w - 3));
         const ty = room.y + 1 + vrng.int(0, Math.max(0, room.h - 3));
@@ -203,6 +222,15 @@ export function createWorld(canvas) {
         group.scale.setScalar(s);
         propGroup.add(group);
       }
+    }
+    for (let i = 0; i < 48; i++) {
+      const ox = -16 + vrng.range(0, 80), oz = -12 + vrng.range(0, 60);
+      if (ox > 0 && ox < GRID_W && oz > 0 && oz < GRID_H) continue;
+      const { group } = buildProp(area, vrng.pick(kinds));
+      group.position.set(ox + 0.5, 0, oz + 0.5);
+      group.rotation.y = vrng.range(0, 6.28);
+      group.scale.setScalar(vrng.range(1, 1.8));
+      propGroup.add(group);
     }
   }
 
@@ -231,9 +259,6 @@ export function createWorld(canvas) {
   const damagePool = [];
   const telegraphPool = [];
   const aimPool = [];
-  // Neri the hero: a real rigged GLB (assets/neri.glb, KayKit Mage, CC0).
-  // Loads async; the sim never waits for it. yawOffset is tuned after the
-  // visual preview (which way the model faces at rest).
   let neri = null; // { group, model, modelMat, mixer, actions, lantern, aura, moth, current, oneshot, prevCd, prevHurt, yawOffset }
   let neriLoading = null;
   let bossMesh = null;
@@ -241,9 +266,6 @@ export function createWorld(canvas) {
   let emberMeshes = new Map(); // patch id -> group
   const streakPool = [];
 
-  // Load the real rigged hero and rig her up: scale to CAM height, hide
-  // her staff/wand/spellbook (she carries only her lantern), hang the
-  // lantern on her left hand slot, wire the animation mixer.
   async function loadNeri() {
     if (neri) return neri;
     if (neriLoading) return neriLoading;
@@ -253,7 +275,6 @@ export function createWorld(canvas) {
         const model = gltf.scene;
         const HIDDEN = new Set(['2H_Staff', '1H_Wand', 'Spellbook', 'Spellbook_open']);
         model.traverse((o) => { if (HIDDEN.has(o.name)) o.visible = false; });
-        // Scale from the BODY meshes only (the staff would stretch the box).
         model.updateMatrixWorld(true);
         const bodyBox = new THREE.Box3();
         model.traverse((o) => {
@@ -265,7 +286,6 @@ export function createWorld(canvas) {
         const s = CAM.neriHeight / Math.max(0.01, size.y);
         model.scale.setScalar(s);
         model.updateMatrixWorld(true);
-        // Feet on the floor: shift so the body's min-y sits at 0.
         const footBox = new THREE.Box3();
         model.traverse((o) => {
           if (o.isMesh && o.name.startsWith('Mage_')) footBox.expandByObject(o);
@@ -273,15 +293,12 @@ export function createWorld(canvas) {
         if (!footBox.isEmpty()) model.position.y = -footBox.min.y;
         const group = new THREE.Group();
         group.add(model);
-        // Lantern on the left hand slot (falls back to the right hand,
-        // then to a fixed spot beside her).
         let hand = null;
         model.traverse((o) => { if (!hand && (o.name === 'handslotl' || o.name === 'handl')) hand = o; });
         if (!hand) model.traverse((o) => { if (!hand && (o.name === 'handslotr' || o.name === 'handr')) hand = o; });
         const lantern = buildLantern();
         if (hand) hand.add(lantern.group);
         else { lantern.group.position.set(-0.7, 1.4, 0.2); group.add(lantern.group); }
-        // Aura + moth scale with her (they are built at the old 2.6 size).
         const k = CAM.neriHeight / 2.6;
         const aura = buildAuraRing();
         aura.scale.setScalar(k);
@@ -292,10 +309,8 @@ export function createWorld(canvas) {
         group.add(moth);
         group.visible = false;
         scene.add(group);
-        // One shared material (mage_texture) — cache it for the hurt flash.
         let modelMat = null;
         model.traverse((o) => { if (!modelMat && o.isMesh && o.material) modelMat = o.material; });
-        // Animation mixer + clip map (KayKit names; fallbacks included).
         const mixer = new THREE.AnimationMixer(model);
         const clips = {};
         for (const c of gltf.animations) clips[c.name] = c;
@@ -420,7 +435,7 @@ export function createWorld(canvas) {
     buildProps();
     buildChestsAndStatues();
     scene.background = new THREE.Color(AREAS[0].sky);
-    farGround.material.color.set(AREAS[0].outline);
+    bakeGround();
   }
 
   function setArea(a) {
@@ -430,7 +445,7 @@ export function createWorld(canvas) {
     buildWalls();
     buildProps();
     scene.background = new THREE.Color(AREAS[a].sky);
-    farGround.material.color.set(AREAS[a].outline);
+    bakeGround();
   }
 
   function pxPerUnit() {
@@ -438,19 +453,14 @@ export function createWorld(canvas) {
     return h / (2 * CAM.dist * Math.tan((CAM.fov * Math.PI) / 360));
   }
 
-  // One frame of visuals from simulation state.
   function sync(sim, dt) {
     const p = sim.player;
-    // --- player: the real GLB hero (loads async; the sim never waits) ---
     if (!neri && !neriLoading) loadNeri();
     if (neri) {
       const pg = neri.group;
       pg.visible = true;
       pg.position.set(toX(p.x), 0, toZ(p.y));
-      // faceAngle is atan2 in px space (x right, y down = +z); a model
-      // facing +Z at rest needs rotation.y = PI/2 - faceAngle (+yawOffset).
       pg.rotation.y = Math.PI / 2 - (p.faceAngle || 0) + neri.yawOffset;
-      // --- animation: locomotion loop + one-shot cast/hurt/death/cheer ---
       const a = neri.actions;
       const loop = p.moving ? 'walk' : 'idle';
       if (p.hurtT > 0 && neri.prevHurt <= 0 && a.hurt) neri.oneshot = a.hurt;
@@ -476,18 +486,15 @@ export function createWorld(canvas) {
         neri.current = want;
       }
       neri.mixer.update(Math.min(dt, 0.05));
-      // Lantern flicker + moth + aura (same feel as v3).
       neri.lantern.parts.light.intensity = 24 + Math.sin(sim.time * 7) * 3;
       neri.moth.position.y = 2.0 + Math.sin(sim.time * 2.2) * 0.16;
       neri.moth.position.x = 0.75 + Math.sin(sim.time * 1.5) * 0.1;
       neri.aura.material.opacity = 0.24 + Math.sin(sim.time * 3) * 0.06;
-      // Hurt flash: the Mage shares one material — flash the whole model.
       if (neri.modelMat && neri.modelMat.emissive) {
         neri.modelMat.emissive.setHex(p.hurtT > 0 ? 0x881111 : 0x000000);
       }
     }
 
-    // --- enemies ---
     const seenEnemies = new Set();
     for (const e of sim.enemies) {
       seenEnemies.add(e.id);
@@ -502,9 +509,9 @@ export function createWorld(canvas) {
       if (e.type === 'puffcap' && e.hopT > 0) {
         const k = 1 - e.hopT / 0.25;
         y = Math.sin(k * Math.PI) * 0.55;
-        g.scale.set(1 + k * 0.1, 1 - k * 0.12, 1 + k * 0.1);
+        g.scale.set(1.25 + k * 0.12, 1.25 - k * 0.15, 1.25 + k * 0.12);
       } else {
-        g.scale.set(1, 1, 1);
+        g.scale.setScalar(1.25);
       }
       g.position.set(toX(e.x), y, toZ(e.y));
       g.rotation.y = e.faceAngle || 0;
@@ -521,7 +528,6 @@ export function createWorld(canvas) {
       if (!seenEnemies.has(id)) { scene.remove(em.group); enemyMeshes.delete(id); }
     }
 
-    // --- boss ---
     if (sim.boss) {
       if (!bossMesh) { bossMesh = buildBoss(); scene.add(bossMesh.group); }
       const b = sim.boss;
@@ -540,7 +546,6 @@ export function createWorld(canvas) {
       bossMesh.group.visible = false;
     }
 
-    // --- loot ---
     const seenLoot = new Set();
     for (const l of sim.loot) {
       seenLoot.add(l.id);
@@ -562,7 +567,6 @@ export function createWorld(canvas) {
       if (!seenLoot.has(id)) { scene.remove(lm.group); lootMeshes.delete(id); }
     }
 
-    // --- chests / statues ---
     for (const c of chestMeshes) {
       c.group.visible = !c.data.opened;
       if (c.data.opened) c.parts.lid.rotation.x = -1.1;
@@ -571,7 +575,6 @@ export function createWorld(canvas) {
       s.parts.ring.material.opacity = s.data.used ? 0.08 : 0.4 + Math.sin(sim.time * 2.5) * 0.12;
     }
 
-    // --- projectiles ---
     for (const pr of projPool) pr.inUse = false;
     for (const pr of sim.projectiles) {
       const slot = getProj();
@@ -586,7 +589,6 @@ export function createWorld(canvas) {
     }
     for (const pr of projPool) if (!pr.inUse) pr.group.visible = false;
 
-    // --- particles ---
     for (const pt of particlePool) pt.inUse = false;
     for (const pt of sim.particles) {
       const slot = getParticle();
@@ -601,7 +603,6 @@ export function createWorld(canvas) {
     }
     for (const pt of particlePool) if (!pt.inUse) pt.mesh.visible = false;
 
-    // --- damage numbers ---
     for (const d of damagePool) d.inUse = false;
     const ppu = pxPerUnit();
     for (const dn of sim.damageNumbers) {
@@ -617,7 +618,6 @@ export function createWorld(canvas) {
     }
     for (const d of damagePool) if (!d.inUse) d.sprite.visible = false;
 
-    // --- telegraphs ---
     for (const t of telegraphPool) t.inUse = false;
     for (const tg of sim.telegraphs) {
       const slot = getTelegraph(tg.color, 1);
@@ -633,7 +633,6 @@ export function createWorld(canvas) {
     }
     for (const t of telegraphPool) if (!t.inUse) t.group.visible = false;
 
-    // --- aim lines ---
     for (const a of aimPool) a.group.visible = false;
     let ai = 0;
     for (const tg of sim.telegraphs) {
@@ -653,7 +652,6 @@ export function createWorld(canvas) {
       ai++;
     }
 
-    // --- crescent slash ---
     if (sim.slash && sim.slash.life > 0) {
       if (!slashMesh) { slashMesh = buildSlash(); scene.add(slashMesh.group); }
       slashMesh.group.visible = true;
@@ -668,7 +666,6 @@ export function createWorld(canvas) {
       slashMesh.group.visible = false;
     }
 
-    // --- ember patches ---
     const seenEmbers = new Set();
     for (const e of sim.embers) {
       seenEmbers.add(e.id);
@@ -688,7 +685,6 @@ export function createWorld(canvas) {
       if (!seenEmbers.has(id)) { scene.remove(em.group); emberMeshes.delete(id); }
     }
 
-    // --- starfall streaks ---
     for (const st of streakPool) st.group.visible = false;
     let si = 0;
     for (const st of sim.streaks) {
@@ -706,11 +702,7 @@ export function createWorld(canvas) {
     // --- camera: follow Neri, tilted 55 deg, with deterministic shake ---
     let tx = toX(p.x);
     const tz = Math.max(4, Math.min(GRID_H - 4, toZ(p.y)));
-    // Title framing: the title panel covers the screen centre, so shift
-    // the camera target left and Neri stands right of the panel, visible.
     // The left clamp is relaxed in title state (the dark ground fills the
-    // margin); without it the shift does nothing when Neri spawns near
-    // the dungeon's left edge, where the camera already sits at the bound.
     if (sim.state === 'title') tx -= CAM.titleShiftX;
     tx = Math.max(sim.state === 'title' ? -6 : 6, Math.min(GRID_W - 6, tx));
     const tilt = (CAM.tiltDeg * Math.PI) / 180;
