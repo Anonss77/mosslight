@@ -1,10 +1,11 @@
-// Mosslight v5 — 3D world: renderer, camera, lights, floor, walls,
-// props, sync sim->meshes. Sim in px (768x576, 16px tiles); 1 unit=16px.
+// Mosslight v6 — 3D world: renderer, camera, lights, open field, props,
+// sync sim->meshes. Sim in px (2400x1800 open field); 1 unit=16px.
 // Decor uses its own visual stream, re-seeded per area bake: the render
-// never shifts gameplay.
+// never shifts gameplay. No walls, no rooms, no void — the ground fills
+// every frame and the field edge is a dense tree line.
 
 import * as THREE from 'three';
-import { GRID_W, GRID_H, TILE, WORLD_W, WORLD_H, AREAS, CAM } from './config.js';
+import { TILE, FIELD_W, FIELD_H, AREAS, CAM } from './config.js';
 import { makeRng } from './random.js';
 import {
   buildLantern, buildAuraRing, buildMoth,
@@ -14,7 +15,6 @@ import {
   blobShadow, lam,
 } from './models.js';
 import { GLTFLoader } from '../vendor/loaders/GLTFLoader.js';
-import { isFloor } from './dungeon.js';
 
 const PX = 1 / TILE; // px -> world units
 const toX = (px) => px * PX;
@@ -32,115 +32,75 @@ export function createWorld(canvas) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(CAM.fov, 1, 0.1, 200);
+  const camera = new THREE.PerspectiveCamera(CAM.fov, 1, 0.1, 400);
   const ambient = new THREE.AmbientLight(0xffffff, 1.6);
   scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xfff2d0, 2.4);
   sun.position.set(6, 14, 4);
   scene.add(sun);
-  const farGround = new THREE.Mesh(
-    new THREE.PlaneGeometry(400, 400),
-    new THREE.MeshLambertMaterial({ color: 0xffffff }),
-  );
-  farGround.rotation.x = -Math.PI / 2;
-  farGround.position.set(GRID_W / 2, -0.08, GRID_H / 2);
-  scene.add(farGround);
-  function bakeGround() {
-    const p = AREAS[area], c = document.createElement('canvas');
-    c.width = c.height = 128;
-    const x = c.getContext('2d');
-    for (let a = 0; a < 8; a++) for (let b = 0; b < 8; b++) {
-      x.fillStyle = (a + b) % 2 ? p.floor : p.floorAlt;
-      x.fillRect(a * 16, b * 16, 16, 16);
-    }
-    x.fillStyle = p.highlight; x.globalAlpha = 0.35;
-    for (let i = 0; i < 48; i++) x.fillRect((i * 53) % 128, (i * 97) % 128, 2, 2);
-    x.globalAlpha = 1;
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(40, 40); t.anisotropy = 4;
-    if (farGround.material.map) farGround.material.map.dispose();
-    farGround.material.map = t;
-    farGround.material.needsUpdate = true;
-  }
 
-  let dungeon = null;
+  let field = null;
   let area = 0;
   let floorMesh = null;
-  let wallMesh = null;
-  let wallTopMesh = null;
   let propGroup = new THREE.Group();
   scene.add(propGroup);
   let chestMeshes = [];
   let statueMeshes = [];
 
-  // ---- floor baking (canvas texture, per area) ----
+  // ---- ground baking (one canvas texture for the whole open field) ----
   function bakeFloor() {
     const pal = AREAS[area];
     const cv = document.createElement('canvas');
-    cv.width = WORLD_W; cv.height = WORLD_H;
+    cv.width = 1200; cv.height = 900;
     const ctx = cv.getContext('2d');
     const vrng = makeRng(0x51ab3f ^ (area * 7919 + 13));
-    for (let ty = 0; ty < GRID_H; ty++) {
-      for (let tx = 0; tx < GRID_W; tx++) {
-        const px = tx * TILE, py = ty * TILE;
-        if (isFloor(dungeon, tx, ty)) {
-          ctx.fillStyle = (tx + ty) % 2 === 0 ? pal.floor : pal.floorAlt;
-          ctx.fillRect(px, py, TILE, TILE);
-          const h1 = tileHash(tx, ty), h2 = tileHash(ty, tx);
-          ctx.fillStyle = pal.highlight;
-          ctx.globalAlpha = 0.25;
-          ctx.fillRect(px + 3 + h1 * 8, py + 4 + h2 * 7, 2, 2);
-          ctx.fillRect(px + 9 + h2 * 4, py + 10 + h1 * 3, 2, 2);
-          ctx.globalAlpha = 1;
-        } else {
-          ctx.fillStyle = (tx + ty) % 2 === 0 ? pal.outline : pal.wall;
-          ctx.fillRect(px, py, TILE, TILE);
-          const h1 = tileHash(tx, ty);
-          ctx.fillStyle = pal.highlight;
-          ctx.globalAlpha = 0.2;
-          ctx.fillRect(px + 3 + h1 * 8, py + 4 + h1 * 7, 2, 2);
-          ctx.globalAlpha = 1;
-        }
+    const sx = 1200 / FIELD_W, sy = 900 / FIELD_H;
+    // Checker terrain, 16px world tiles.
+    for (let ty = 0; ty < FIELD_H / TILE; ty++) {
+      for (let tx = 0; tx < FIELD_W / TILE; tx++) {
+        ctx.fillStyle = (tx + ty) % 2 === 0 ? pal.floor : pal.floorAlt;
+        ctx.fillRect(tx * TILE * sx, ty * TILE * sy, TILE * sx + 0.5, TILE * sy + 0.5);
       }
     }
+    // Speckle.
+    ctx.fillStyle = pal.highlight;
+    ctx.globalAlpha = 0.35;
+    for (let i = 0; i < 900; i++) ctx.fillRect((i * 53) % 1200, (i * 97) % 900, 2, 2);
+    ctx.globalAlpha = 1;
     // Area features, seeded (same seed every bake -> same layout).
     if (area === 0) {
-      for (let i = 0; i < 3; i++) {
-        const room = vrng.pick(dungeon.rooms);
-        const cx = (room.x + 1 + vrng.range(1, Math.max(1.1, room.w - 2))) * TILE;
-        const cy = (room.y + 1 + vrng.range(1, Math.max(1.1, room.h - 2))) * TILE;
+      for (let i = 0; i < 6; i++) {
         ctx.fillStyle = pal.water;
         ctx.globalAlpha = 0.85;
-        ctx.beginPath(); ctx.ellipse(cx, cy, 26, 16, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(vrng.range(100, FIELD_W - 100) * sx, vrng.range(100, FIELD_H - 100) * sy, 26, 16, 0, 0, Math.PI * 2);
+        ctx.fill();
         ctx.globalAlpha = 1;
       }
-      for (let i = 0; i < 40; i++) {
-        const room = vrng.pick(dungeon.rooms);
+      for (let i = 0; i < 500; i++) {
         ctx.fillStyle = pal.flower;
-        ctx.fillRect(
-          (room.x + vrng.range(0.5, room.w - 0.5)) * TILE,
-          (room.y + vrng.range(0.5, room.h - 0.5)) * TILE, 3, 3);
+        ctx.fillRect(vrng.range(0, FIELD_W) * sx, vrng.range(0, FIELD_H) * sy, 3, 3);
       }
     } else if (area === 1) {
-      for (let i = 0; i < 26; i++) {
-        const room = vrng.pick(dungeon.rooms);
+      for (let i = 0; i < 8; i++) {
+        ctx.fillStyle = pal.wall;
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath();
+        ctx.ellipse(vrng.range(100, FIELD_W - 100) * sx, vrng.range(100, FIELD_H - 100) * sy, 60, 40, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      for (let i = 0; i < 320; i++) {
         ctx.fillStyle = vrng.chance(0.5) ? pal.machinery : pal.forge;
         ctx.globalAlpha = 0.8;
-        ctx.fillRect(
-          (room.x + vrng.range(0.5, room.w - 0.5)) * TILE,
-          (room.y + vrng.range(0.5, room.h - 0.5)) * TILE, 4, 4);
+        ctx.fillRect(vrng.range(0, FIELD_W) * sx, vrng.range(0, FIELD_H) * sy, 4, 4);
         ctx.globalAlpha = 1;
       }
     } else {
-      for (let i = 0; i < 34; i++) {
-        const room = vrng.pick(dungeon.rooms);
+      for (let i = 0; i < 420; i++) {
         ctx.fillStyle = vrng.chance(0.55) ? pal.crystal : pal.fungus;
         ctx.globalAlpha = 0.85;
-        ctx.fillRect(
-          (room.x + vrng.range(0.5, room.w - 0.5)) * TILE,
-          (room.y + vrng.range(0.5, room.h - 0.5)) * TILE, 3, 3);
+        ctx.fillRect(vrng.range(0, FIELD_W) * sx, vrng.range(0, FIELD_H) * sy, 3, 3);
         ctx.globalAlpha = 1;
       }
     }
@@ -153,49 +113,13 @@ export function createWorld(canvas) {
       floorMesh.material.needsUpdate = true;
     } else {
       floorMesh = new THREE.Mesh(
-        new THREE.PlaneGeometry(GRID_W, GRID_H),
+        new THREE.PlaneGeometry(FIELD_W / TILE, FIELD_H / TILE),
         new THREE.MeshLambertMaterial({ map: tex }),
       );
       floorMesh.rotation.x = -Math.PI / 2;
-      floorMesh.position.set(GRID_W / 2, 0, GRID_H / 2);
+      floorMesh.position.set(FIELD_W / TILE / 2, 0, FIELD_H / TILE / 2);
       scene.add(floorMesh);
     }
-  }
-
-  // ---- walls (instanced boxes, only tiles touching floor) ----
-  function buildWalls() {
-    const pal = AREAS[area];
-    const spots = [];
-    for (let ty = 0; ty < GRID_H; ty++) {
-      for (let tx = 0; tx < GRID_W; tx++) {
-        if (isFloor(dungeon, tx, ty)) continue;
-        let near = false;
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
-          if (isFloor(dungeon, tx + dx, ty + dy)) { near = true; break; }
-        }
-        if (near) spots.push([tx + 0.5, ty + 0.5]);
-      }
-    }
-    const box = new THREE.BoxGeometry(1, 1, 1);
-    const mat = new THREE.MeshLambertMaterial({ color: pal.wall });
-    if (wallMesh) { scene.remove(wallMesh); wallMesh.dispose(); }
-    if (wallTopMesh) { scene.remove(wallTopMesh); wallTopMesh.dispose(); }
-    wallMesh = new THREE.InstancedMesh(box, mat, spots.length);
-    const topBox = new THREE.BoxGeometry(1.04, 0.1, 1.04);
-    const topMat = new THREE.MeshLambertMaterial({ color: pal.wallTop });
-    wallTopMesh = new THREE.InstancedMesh(topBox, topMat, spots.length);
-    const m4 = new THREE.Matrix4();
-    const q = new THREE.Quaternion(), pv = new THREE.Vector3(), sv = new THREE.Vector3();
-    spots.forEach(([x, z], i) => {
-      const h = 0.5 + tileHash((x * 7) | 0, (z * 7) | 0) * 0.55;
-      m4.compose(pv.set(x, h / 2, z), q, sv.set(1, h, 1));
-      wallMesh.setMatrixAt(i, m4);
-      m4.compose(pv.set(x, h + 0.05, z), q, sv.set(1.04, 0.1, 1.04));
-      wallTopMesh.setMatrixAt(i, m4);
-    });
-    wallMesh.instanceMatrix.needsUpdate = true;
-    wallTopMesh.instanceMatrix.needsUpdate = true;
-    scene.add(wallMesh, wallTopMesh);
   }
 
   // ---- props (visual only, rebuilt per area from a fixed seed) ----
@@ -210,40 +134,76 @@ export function createWorld(canvas) {
     scene.add(propGroup);
     const vrng = makeRng(0x51ab3f ^ (area * 7919 + 13));
     const kinds = PROP_KINDS[area];
-    for (const room of dungeon.rooms) {
-      const n = room.w * room.h >= 48 ? 6 : room.w * room.h >= 30 ? 4 : 3;
-      for (let i = 0; i < n; i++) {
-        const tx = room.x + 1 + vrng.int(0, Math.max(0, room.w - 3));
-        const ty = room.y + 1 + vrng.int(0, Math.max(0, room.h - 3));
-        const { group } = buildProp(area, vrng.pick(kinds));
-        group.position.set(tx + 0.5, 0, ty + 0.5);
-        group.rotation.y = vrng.range(0, Math.PI * 2);
-        const s = vrng.range(0.85, 1.15);
-        group.scale.setScalar(s);
-        propGroup.add(group);
-      }
-    }
-    for (let i = 0; i < 48; i++) {
-      const ox = -16 + vrng.range(0, 80), oz = -12 + vrng.range(0, 60);
-      if (ox > 0 && ox < GRID_W && oz > 0 && oz < GRID_H) continue;
+    const FW = FIELD_W / TILE, FH = FIELD_H / TILE;
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion(), pv = new THREE.Vector3(), sv = new THREE.Vector3();
+    // Scattered props across the whole field (no collision).
+    for (let i = 0; i < 240; i++) {
       const { group } = buildProp(area, vrng.pick(kinds));
-      group.position.set(ox + 0.5, 0, oz + 0.5);
-      group.rotation.y = vrng.range(0, 6.28);
-      group.scale.setScalar(vrng.range(1, 1.8));
+      group.position.set(vrng.range(3, FW - 3), 0, vrng.range(3, FH - 3));
+      group.rotation.y = vrng.range(0, Math.PI * 2);
+      group.scale.setScalar(vrng.range(0.85, 1.3));
       propGroup.add(group);
     }
+    // Grass tufts: one instanced mesh, thousands of blades. Dense on
+    // purpose (v6: every frame must read full) — the tufts are small,
+    // so the count is high and the blades are chunky.
+    const tuftGeo = new THREE.ConeGeometry(0.13, 0.85, 5);
+    const tuftMat = new THREE.MeshLambertMaterial({ color: area === 2 ? 0xa7e760 : 0x5da85a });
+    const TUFTS = 1600;
+    const tufts = new THREE.InstancedMesh(tuftGeo, tuftMat, TUFTS * 3);
+    for (let i = 0; i < TUFTS; i++) {
+      const bx = vrng.range(2, FW - 2), bz = vrng.range(2, FH - 2);
+      for (let j = 0; j < 3; j++) {
+        const s = vrng.range(0.7, 1.3);
+        m4.compose(pv.set(bx + vrng.range(-0.14, 0.14), 0.3 * s, bz + vrng.range(-0.14, 0.14)), q, sv.set(s, s, s));
+        tufts.setMatrixAt(i * 3 + j, m4);
+      }
+    }
+    tufts.instanceMatrix.needsUpdate = true;
+    propGroup.add(tufts);
+    // Border trees: a dense forest edge around the field (instanced
+    // trunk + canopy) — the field ends in trees, never a wall.
+    const per = Math.floor((FW + FH) * 2 / 2.4);
+    const trunkGeo = new THREE.CylinderGeometry(0.14, 0.22, 0.9, 7);
+    const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6a452c });
+    const canopyGeo = new THREE.SphereGeometry(0.62, 10, 8);
+    const canopyMat = new THREE.MeshLambertMaterial({ color: area === 0 ? 0x4a9a4a : area === 1 ? 0x7a5a3a : 0x8a7ac8 });
+    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, per);
+    const canopies = new THREE.InstancedMesh(canopyGeo, canopyMat, per);
+    for (let i = 0; i < per; i++) {
+      const t = (i / per) * (FW + FH) * 2;
+      // Jittered on purpose: a forest edge, not a fence — trees sit at
+      // varying depths (some a few units inside the field edge) and the
+      // spacing is uneven, so the border never reads as a wall.
+      const jt = vrng.range(-0.9, 0.9); // along the edge
+      const jd = vrng.range(-0.3, 2.4); // depth into the field
+      let x, z;
+      if (t < FW) { x = t + jt; z = 0.6 + jd; }
+      else if (t < FW + FH) { x = FW - 0.6 - jd; z = t - FW + jt; }
+      else if (t < FW * 2 + FH) { x = FW - (t - FW - FH) + jt; z = FH - 0.6 - jd; }
+      else { x = 0.6 + jd; z = FH - (t - FW * 2 - FH) + jt; }
+      const s = 0.8 + tileHash(i * 3, area) * 1.2;
+      m4.compose(pv.set(x, 0.45 * s, z), q, sv.set(s, s, s));
+      trunks.setMatrixAt(i, m4);
+      m4.compose(pv.set(x, 1.25 * s, z), q, sv.set(s, s, s));
+      canopies.setMatrixAt(i, m4);
+    }
+    trunks.instanceMatrix.needsUpdate = true;
+    canopies.instanceMatrix.needsUpdate = true;
+    propGroup.add(trunks, canopies);
   }
 
   function buildChestsAndStatues() {
     for (const c of chestMeshes) scene.remove(c.group);
     for (const s of statueMeshes) scene.remove(s.group);
-    chestMeshes = dungeon.chests.map((c) => {
+    chestMeshes = field.chests.map((c) => {
       const built = buildChest();
       built.group.position.set(toX(c.x), 0, toZ(c.y));
       scene.add(built.group);
       return { ...built, data: c };
     });
-    statueMeshes = dungeon.statues.map((s) => {
+    statueMeshes = field.statues.map((s) => {
       const built = buildStatue();
       built.group.position.set(toX(s.x), 0, toZ(s.y));
       scene.add(built.group);
@@ -254,6 +214,7 @@ export function createWorld(canvas) {
   // ---- entity mesh pools ----
   const enemyMeshes = new Map(); // id -> {group, parts, type}
   const lootMeshes = new Map(); // id -> {group, parts, kind}
+  const pickupMeshes = new Map(); // id -> {group, parts, kind}
   const projPool = [];
   const particlePool = [];
   const damagePool = [];
@@ -427,25 +388,21 @@ export function createWorld(canvas) {
   }
 
   // ---- public API ----
-  function setDungeon(d) {
-    dungeon = d;
+  function setField(f) {
+    field = f;
     area = 0;
     bakeFloor();
-    buildWalls();
     buildProps();
     buildChestsAndStatues();
     scene.background = new THREE.Color(AREAS[0].sky);
-    bakeGround();
   }
 
   function setArea(a) {
     if (a === area) return;
     area = a;
     bakeFloor();
-    buildWalls();
     buildProps();
     scene.background = new THREE.Color(AREAS[a].sky);
-    bakeGround();
   }
 
   function pxPerUnit() {
@@ -565,6 +522,27 @@ export function createWorld(canvas) {
     }
     for (const [id, lm] of lootMeshes) {
       if (!seenLoot.has(id)) { scene.remove(lm.group); lootMeshes.delete(id); }
+    }
+
+    // Static field pickups (gem / coin pile / heart): bob and spin.
+    const seenPickups = new Set();
+    for (const pk of sim.pickups || []) {
+      if (pk.taken) continue;
+      seenPickups.add(pk.id);
+      let pm = pickupMeshes.get(pk.id);
+      if (!pm) {
+        pm = pk.kind === 'gem' ? buildShard() : pk.kind === 'coins' ? buildCoin() : buildHeart();
+        scene.add(pm.group);
+        pickupMeshes.set(pk.id, { ...pm, kind: pk.kind });
+      }
+      const g = pm.group;
+      const bobY = 0.3 + Math.sin(sim.time * 3 + pk.id * 1.7) * 0.08;
+      g.position.set(toX(pk.x), bobY, toZ(pk.y));
+      g.rotation.y = sim.time * 3 + pk.id;
+      if (pk.kind === 'coins') g.scale.setScalar(1.5);
+    }
+    for (const [id, pm] of pickupMeshes) {
+      if (!seenPickups.has(id)) { scene.remove(pm.group); pickupMeshes.delete(id); }
     }
 
     for (const c of chestMeshes) {
@@ -700,11 +678,15 @@ export function createWorld(canvas) {
     }
 
     // --- camera: follow Neri, tilted 55 deg, with deterministic shake ---
+    // The field is 150x112.5 units; the camera target stays well inside
+    // it, so the frame is always ground — never void.
+    const FW = FIELD_W / TILE, FH = FIELD_H / TILE;
     let tx = toX(p.x);
-    const tz = Math.max(4, Math.min(GRID_H - 4, toZ(p.y)));
-    // The left clamp is relaxed in title state (the dark ground fills the
+    const tz = Math.max(9, Math.min(FH - 9, toZ(p.y)));
+    // The left clamp is relaxed in title state (Neri stands right of the
+    // centred title panel).
     if (sim.state === 'title') tx -= CAM.titleShiftX;
-    tx = Math.max(sim.state === 'title' ? -6 : 6, Math.min(GRID_W - 6, tx));
+    tx = Math.max(sim.state === 'title' ? FW / 2 - 24 : 14, Math.min(FW - 14, tx));
     const tilt = (CAM.tiltDeg * Math.PI) / 180;
     const dy = Math.sin(tilt) * CAM.dist;
     const dz = Math.cos(tilt) * CAM.dist;
@@ -732,5 +714,5 @@ export function createWorld(canvas) {
     renderer.setPixelRatio(r);
   }
 
-  return { setDungeon, setArea, sync, render, resize, setPixelRatio, loadNeri, isNeriLoaded: () => !!neri, scene, camera, renderer };
+  return { setField, setArea, sync, render, resize, setPixelRatio, loadNeri, isNeriLoaded: () => !!neri, scene, camera, renderer };
 }

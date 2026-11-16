@@ -6,34 +6,55 @@
 // HUD sizes). Nothing here is copied from the v1-v3 code; every value is
 // re-stated from the design prose.
 
-export const TILE = 16; // px per tile
-export const GRID_W = 48; // tiles
-export const GRID_H = 36; // tiles
-export const WORLD_W = GRID_W * TILE; // 768 px
-export const WORLD_H = GRID_H * TILE; // 576 px
+export const TILE = 16; // px per tile (kept for the px<->unit render scale)
+export const FIELD_W = 2400; // px — one big open field, no dungeon
+export const FIELD_H = 1800; // px
+export const WORLD_W = FIELD_W;
+export const WORLD_H = FIELD_H;
 export const UNIT = TILE; // 1 world unit = 16 px (render scale)
+
+// ---- deterministic rotation constants (v6) ----
+// Math.sin/cos/atan2 are NOT correctly rounded: Node 24's V8 and the
+// Chromium V8 in the headless shell differ by 1 ULP on some inputs, and
+// that 1 ULP desyncs the sim across environments (verified: seed 42
+// diverges at step 720). The sim therefore uses NO trig at all — only
+// correctly-rounded ops (sqrt, hypot, + - * /). Rotations by a FIXED
+// angle use these decimal literals, which parse to identical doubles in
+// every JS engine. (Render-only code in world.js/models.js still uses
+// Math.sin/cos — it never feeds the sim.)
+export const COS05 = 0.8775825618903728, SIN05 = 0.479425538604203; // cos/sin(0.5)
+export const COS06 = 0.8253356149096783, SIN06 = 0.5646424733950355; // cos/sin(0.6)
+// Boss fan: 5 shards at -24,-12,0,12,24 deg from the base direction.
+export const FAN_OFF = [
+  { c: 0.9135454576426009, s: -0.4067366430758002 },
+  { c: 0.9781476007338057, s: -0.2079116908177593 },
+  { c: 1, s: 0 },
+  { c: 0.9781476007338057, s: 0.2079116908177593 },
+  { c: 0.9135454576426009, s: 0.4067366430758002 },
+];
 
 // ---- run structure ----
 export const WAVE_TIME = 50; // s per wave
 export const INTERMISSION_TIME = 20; // s
 export const WAVE_COUNT = 8;
-export const MAX_ENEMIES = 80;
+export const MAX_ENEMIES = 120;
 export const SPAWN_GROUP_EVERY = 7; // s
 export const SPAWN_MIN_DIST = 240; // px from the player
 export const VICTORY_BONUS = 5000;
 export const DEFEAT_PER_WAVE = 100;
 
 // waves: area, spawn groups, enemies per group, HP mult, speed mult
-// (wave 8: boss + 4 groups x 3 @ 1.5x HP — as-built deviation from Sol's 7x5 @ 2.0x)
+// (v6: more enemies per group than the dungeon build — same per-enemy
+// stats, just more of them on screen at once; wave 8: boss + 4 groups x 5)
 export const WAVES = [
-  { area: 0, groups: 5, perGroup: 3, hpMul: 1.0, spMul: 1.0 },
-  { area: 0, groups: 6, perGroup: 3, hpMul: 1.1, spMul: 1.0 },
-  { area: 0, groups: 6, perGroup: 4, hpMul: 1.2, spMul: 1.05 },
-  { area: 1, groups: 6, perGroup: 4, hpMul: 1.35, spMul: 1.05 },
-  { area: 1, groups: 7, perGroup: 4, hpMul: 1.5, spMul: 1.1 },
-  { area: 1, groups: 7, perGroup: 5, hpMul: 1.65, spMul: 1.1 },
-  { area: 2, groups: 8, perGroup: 5, hpMul: 1.8, spMul: 1.15 },
-  { area: 2, groups: 4, perGroup: 3, hpMul: 1.5, spMul: 1.15, boss: true },
+  { area: 0, groups: 5, perGroup: 5, hpMul: 1.0, spMul: 1.0 },
+  { area: 0, groups: 6, perGroup: 5, hpMul: 1.1, spMul: 1.0 },
+  { area: 0, groups: 6, perGroup: 6, hpMul: 1.2, spMul: 1.05 },
+  { area: 1, groups: 6, perGroup: 6, hpMul: 1.35, spMul: 1.05 },
+  { area: 1, groups: 7, perGroup: 6, hpMul: 1.5, spMul: 1.1 },
+  { area: 1, groups: 7, perGroup: 8, hpMul: 1.65, spMul: 1.1 },
+  { area: 2, groups: 8, perGroup: 8, hpMul: 1.8, spMul: 1.15 },
+  { area: 2, groups: 4, perGroup: 5, hpMul: 1.5, spMul: 1.15, boss: true },
 ];
 export const AREA_NAMES = ['Bloomroot Warrens', 'Cinderglass Works', 'Moonmilk Vault'];
 

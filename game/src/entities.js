@@ -56,6 +56,9 @@ export function createPlayer(x, y) {
     upgrades: { wick: 0, hands: 0, thread: 0, cape: 0, charm: 0 },
     faceAngle: Math.PI / 2, moving: false, dead: false, // face south
     // (toward the camera) at spawn: the title pose shows Neri front-on.
+    // fx/fy is the facing UNIT VECTOR (deterministic, trig-free — the sim
+    // aims skills from it; faceAngle stays for the renderer only).
+    fx: 0, fy: 1,
     joyX: 0, joyY: 0, // current joystick vector (-1..1)
   };
 }
@@ -69,7 +72,6 @@ export function createEnemy(type, x, y, hpMul, spMul) {
     radius: def.radius, moveRadius: def.moveRadius,
     damage: def.damage,
     state: 'chase', stateT: 0,
-    path: [], pathI: 0, repathT: 0,
     attackCd: 0, aimX: 0, aimY: 0,
     hopT: 0, hopFromX: 0, hopFromY: 0, hopToX: 0, hopToY: 0,
     contactCd: 0, // glassguard contact-damage throttle per enemy
@@ -85,7 +87,6 @@ export function createBoss(x, y) {
     radius: BOSS.radius, moveRadius: BOSS.moveRadius,
     state: 'chase', stateT: 1.2, // first pattern after 1.2s, not instantly on spawn
     patternIdx: 0, phase: 1,
-    path: [], pathI: 0, repathT: 0,
     faceAngle: 0, moving: false, flashT: 0, telegraphing: false,
     ringX: 0, ringY: 0,
     fanAngle: 0,

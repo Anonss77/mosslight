@@ -28,10 +28,10 @@ const audio = new Audio();
 if (autotest || shot) audio.headless = true;
 
 // In autotest mode there is no rendering: a stub world (the sim only
-// calls world.setDungeon / world.setArea) keeps WebGL out of the run.
+// calls world.setField / world.setArea) keeps WebGL out of the run.
 const canvas = document.getElementById('game');
 const world = autotest
-  ? { setDungeon() {}, setArea() {} }
+  ? { setField() {}, setArea() {} }
   : createWorld(canvas);
 // The stage is a fixed 1280x720: set the renderer + camera aspect once.
 // (resize() was never called, so the camera kept aspect 1 and the whole

@@ -37,5 +37,14 @@ export function makeRng(seed) {
     },
     // true with probability p
     chance(p) { return next() < p; },
+    // random unit vector (deterministic: sqrt only, no trig — see the
+    // note in config.js). Two stream draws, direction uniform enough
+    // for spawns and wander; never exactly (0,0) in practice, and the
+    // || 1 guard covers it.
+    unit() {
+      const x = this.range(-1, 1), y = this.range(-1, 1);
+      const l = Math.sqrt(x * x + y * y) || 1;
+      return { x: x / l, y: y / l };
+    },
   };
 }

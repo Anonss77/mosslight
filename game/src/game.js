@@ -1,22 +1,24 @@
-// Mosslight v4 — game orchestration: state machine, waves, combat, boss
-// AI, loot, upgrades, score, the deterministic autotest bot, HUD, minimap,
-// and the screenshot/autotest hooks the verification tools poll.
-// All sim numbers come from config.js; all gameplay randomness from the
-// run RNG; the visual RNG feeds particles and decor only. The simulation
-// runs in px units on the 48x36 tile dungeon; world.js renders it in 3D.
+// Mosslight v6 — game orchestration: state machine, waves, combat, boss
+// AI, loot, pickups, upgrades, score, the deterministic autotest bot,
+// HUD, minimap, and the screenshot/autotest hooks the verification tools
+// poll. All sim numbers come from config.js; all gameplay randomness from
+// the run RNG; the visual RNG feeds particles and decor only. The
+// simulation runs in px units on the 2400x1800 open field; world.js
+// renders it in 3D. No walls, no pathfinding: enemies walk straight at
+// Neri and the bot walks straight at its target.
 
 import {
-  TILE, WORLD_W, WORLD_H, GRID_W, GRID_H,
+  FIELD_W, FIELD_H,
   WAVE_TIME, INTERMISSION_TIME, WAVE_COUNT, WAVES, AREA_NAMES, AREAS,
   MAX_ENEMIES, SPAWN_GROUP_EVERY, SPAWN_MIN_DIST,
   VICTORY_BONUS, DEFEAT_PER_WAVE,
   PLAYER, SKILLS, ENEMIES, BOSS, LOOT, UPGRADES, FEEL,
+  COS05, SIN05, COS06, SIN06, FAN_OFF,
 } from './config.js';
 import { makeRng } from './random.js';
 import {
-  generateDungeon, hashTiles, tileAt, isFloor, circleFits, moveCircle,
-  findPath, spawnPoint, roomAt, randomPointInRoom,
-} from './dungeon.js';
+  generateField, moveField, spawnPoint,
+} from './field.js';
 import {
   SpatialHash, freshIds,
   createPlayer, createEnemy, createBoss, createProjectile, createLoot,
@@ -54,6 +56,7 @@ export class Game {
     this.enemies = [];
     this.projectiles = [];
     this.loot = [];
+    this.pickups = [];
     this.particles = [];
     this.damageNumbers = [];
     this.embers = [];
@@ -63,7 +66,7 @@ export class Game {
     this.boss = null;
     this.offers = [];
     this.player = null;
-    this.dungeon = null;
+    this.field = null;
     this.area = 0;
     this.done = null; // set once on victory/defeat {result, score, ...}
     this.shotReady = false;
@@ -81,16 +84,16 @@ export class Game {
     resetStagger();
     this.rng = makeRng(this.seed);
     this.vrng = makeRng((this.seed ^ 0x51ab3f) >>> 0);
-    this.dungeon = generateDungeon(this.seed);
-    this.world.setDungeon(this.dungeon);
-    const start = this.dungeon.startRoom;
-    const sx = (start.x + Math.floor(start.w / 2)) * TILE + TILE / 2;
-    const sy = (start.y + Math.floor(start.h / 2)) * TILE + TILE / 2;
-    this.player = createPlayer(sx, sy);
+    this.field = generateField(this.seed);
+    this.world.setField(this.field);
+    // Neri spawns at the centre of the open field, facing south (toward
+    // the camera) so the title pose shows her front-on.
+    this.player = createPlayer(FIELD_W / 2, FIELD_H / 2);
     this.area = 0;
     this.enemies = [];
     this.projectiles = [];
     this.loot = [];
+    this.pickups = this.field.pickups.map((p, i) => ({ ...p, id: 1000 + i }));
     this.particles = [];
     this.damageNumbers = [];
     this.embers = [];
@@ -102,7 +105,7 @@ export class Game {
     this.wave = 0; this.time = 0;
     this.done = null;
     this.chestCoins = new Map();
-    for (const c of this.dungeon.chests) {
+    for (const c of this.field.chests) {
       this.chestCoins.set(c, this.rng.int(LOOT.chestCoinsMin, LOOT.chestCoinsMax));
     }
     // Roll the intermission offers for wave 1's intermission up front? No:
@@ -189,39 +192,21 @@ export class Game {
       if (tinkets < tinketCap && r < 0.28) { types[i] = 'tinket'; tinkets++; }
       else if (brams < bramCap && r >= 0.28 && r < 0.45) { types[i] = 'brambler'; brams++; }
     }
-    const base = spawnPoint(this.dungeon, this.rng, this.player.x, this.player.y, def.area, SPAWN_MIN_DIST);
+    const base = spawnPoint(this.rng, this.player.x, this.player.y, SPAWN_MIN_DIST);
     for (const type of types) {
       if (this.enemies.length >= MAX_ENEMIES) break;
-      let x = base.x + this.rng.range(-30, 30);
-      let y = base.y + this.rng.range(-30, 30);
-      if (!circleFits(this.dungeon, x, y, ENEMIES[type].moveRadius)) { x = base.x; y = base.y; }
-      this.enemies.push(createEnemy(type, x, y, def.hpMul, def.spMul));
+      const m = moveField(base.x, base.y, ENEMIES[type].moveRadius, this.rng.range(-30, 30), this.rng.range(-30, 30));
+      this.enemies.push(createEnemy(type, m.x, m.y, def.hpMul, def.spMul));
     }
   }
 
   spawnBoss() {
-    // As-built: the boss spawns ~200px along the BFS path from the player
-    // toward the boss room, so the fight starts immediately.
+    // The boss spawns ~200px from the player in a random direction, so
+    // the fight starts immediately — no path, no boss room anymore.
     const p = this.player;
-    const br = this.dungeon.bossRoom;
-    const bx = (br.x + Math.floor(br.w / 2)) * TILE + TILE / 2;
-    const by = (br.y + Math.floor(br.h / 2)) * TILE + TILE / 2;
-    const path = findPath(this.dungeon, p.x, p.y, bx, by);
-    let x = bx, y = by;
-    if (path.length > 2) {
-      let walked = 0;
-      for (let i = 1; i < path.length; i++) {
-        const seg = dist(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y);
-        if (walked + seg >= BOSS.spawnDist) {
-          const k = (BOSS.spawnDist - walked) / seg;
-          x = path[i - 1].x + (path[i].x - path[i - 1].x) * k;
-          y = path[i - 1].y + (path[i].y - path[i - 1].y) * k;
-          break;
-        }
-        walked += seg;
-      }
-    }
-    this.boss = createBoss(x, y);
+    const u = this.rng.unit();
+    const m = moveField(p.x, p.y, BOSS.moveRadius, u.x * BOSS.spawnDist, u.y * BOSS.spawnDist);
+    this.boss = createBoss(m.x, m.y);
     this.audio.play('roar');
   }
 
@@ -305,6 +290,7 @@ export class Game {
       if (this.slash.life <= 0) this.slash = null;
     }
     this.updateChests(dt);
+    this.updatePickups();
     this.updateStatues(dt);
     // --- wave end ---
     if (this.wave < WAVE_COUNT) {
@@ -346,9 +332,11 @@ export class Game {
     if (len > 1) { mx /= len; my /= len; }
     p.moving = len > 0.05;
     if (p.moving) {
-      const moved = moveCircle(this.dungeon, p.x, p.y, p.moveRadius, mx * p.speed * dt, my * p.speed * dt);
+      const moved = moveField(p.x, p.y, p.moveRadius, mx * p.speed * dt, my * p.speed * dt);
       p.x = moved.x; p.y = moved.y;
-      p.faceAngle = Math.atan2(my, mx);
+      const fl = Math.hypot(mx, my) || 1;
+      p.fx = mx / fl; p.fy = my / fl; // facing unit vector (sim)
+      p.faceAngle = Math.atan2(my, mx); // renderer only
     }
     // Queued skill casts (input.js sets window.__castQueue).
     if (window.__castQueue && window.__castQueue.length) {
@@ -379,12 +367,15 @@ export class Game {
     const target = this.nearestTarget(p.boltRange, true);
     if (!target) { p.boltTimer = 0.1; return; }
     p.boltTimer = p.boltInterval;
-    const a = Math.atan2(target.y - p.y, target.x - p.x);
-    p.faceAngle = a;
+    const dx = target.x - p.x, dy = target.y - p.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d, uy = dy / d;
+    p.fx = ux; p.fy = uy;
+    p.faceAngle = Math.atan2(dy, dx); // renderer only
     p.castT = 0.16;
     this.projectiles.push(createProjectile(
-      p.x + Math.cos(a) * 14, p.y + Math.sin(a) * 14,
-      Math.cos(a) * PLAYER.boltSpeed, Math.sin(a) * PLAYER.boltSpeed,
+      p.x + ux * 14, p.y + uy * 14,
+      ux * PLAYER.boltSpeed, uy * PLAYER.boltSpeed,
       p.boltDamage, 'bolt', 2,
     ));
     this.audio.play('bolt');
@@ -417,7 +408,7 @@ export class Game {
       const target = this.nearestTarget(s.range, true);
       let ax, ay;
       if (target) { ax = target.x; ay = target.y; }
-      else { ax = p.x + Math.cos(p.faceAngle) * 100; ay = p.y + Math.sin(p.faceAngle) * 100; }
+      else { ax = p.x + p.fx * 100; ay = p.y + p.fy * 100; }
       const patch = { id: this.embers.length + 1, x: ax, y: ay, r: s.patchRadius, life: s.tickTime, tickT: SKILLS.ember.tickEvery, tick: s.tick + (p.charmEmber || 0), damage: s.damage };
       this.embers.push(patch);
       for (const e of [...this.enemies]) {
@@ -452,9 +443,10 @@ export class Game {
     for (const e of [...this.enemies]) {
       if (dist(cx, cy, e.x, e.y) <= s.range + e.radius) {
         this.damageEnemy(e, dmg, 'skill', '#ffd76a');
-        const a = Math.atan2(e.y - cy, e.x - cx);
-        const nx = e.x + Math.cos(a) * s.knockback, ny = e.y + Math.sin(a) * s.knockback;
-        if (circleFits(this.dungeon, nx, ny, e.moveRadius)) { e.x = nx; e.y = ny; }
+        const dx = e.x - cx, dy = e.y - cy;
+        const d = Math.hypot(dx, dy) || 1;
+        const m = moveField(e.x, e.y, e.moveRadius, (dx / d) * s.knockback, (dy / d) * s.knockback);
+        e.x = m.x; e.y = m.y;
       }
     }
     if (this.boss && dist(cx, cy, this.boss.x, this.boss.y) <= s.range + this.boss.radius) {
@@ -600,34 +592,24 @@ export class Game {
         if (dd > 0.01 && dd < min) {
           const push = (min - dd) / 2;
           const nx = dx / dd, ny = dy / dd;
-          const ma = moveCircle(this.dungeon, a.x - nx * push, a.y - ny * push, a.moveRadius, 0, 0);
-          const mb = moveCircle(this.dungeon, b.x + nx * push, b.y + ny * push, b.moveRadius, 0, 0);
+          const ma = moveField(a.x - nx * push, a.y - ny * push, a.moveRadius, 0, 0);
+          const mb = moveField(b.x + nx * push, b.y + ny * push, b.moveRadius, 0, 0);
           a.x = ma.x; a.y = ma.y; b.x = mb.x; b.y = mb.y;
         }
       }
     }
   }
 
-  followPath(e, dt, speed) {
-    if (!e.path || e.pathI >= e.path.length) return false;
-    const wp = e.path[e.pathI];
-    const dx = wp.x - e.x, dy = wp.y - e.y;
+  // Open world: walk straight at the target (no walls, no pathfinding).
+  moveToward(e, tx, ty, dt, speed) {
+    const dx = tx - e.x, dy = ty - e.y;
     const d = Math.hypot(dx, dy);
-    if (d < 10) { e.pathI++; return true; }
-    const stepLen = speed * dt;
-    const nx = e.x + (dx / d) * Math.min(stepLen, d);
-    const ny = e.y + (dy / d) * Math.min(stepLen, d);
-    const moved = moveCircle(this.dungeon, e.x, e.y, e.moveRadius, nx - e.x, ny - e.y);
-    e.x = moved.x; e.y = moved.y;
+    if (d < 1) { e.moving = false; return; }
+    const stepLen = Math.min(speed * dt, d);
+    const m = moveField(e.x, e.y, e.moveRadius, (dx / d) * stepLen, (dy / d) * stepLen);
+    e.x = m.x; e.y = m.y;
     e.moving = true;
     e.faceAngle = Math.atan2(dy, dx);
-    return true;
-  }
-
-  repath(e, tx, ty) {
-    e.path = findPath(this.dungeon, e.x, e.y, tx, ty);
-    e.pathI = 0;
-    e.repathT = 1;
   }
 
   updatePuffcap(e, dt, d) {
@@ -641,15 +623,16 @@ export class Game {
         e.state = 'hop';
         e.hopT = def.hopTime;
         e.hopFromX = e.x; e.hopFromY = e.y;
-        const a = Math.atan2(p.y - e.y, p.x - e.x);
-        e.hopToX = e.x + Math.cos(a) * def.hopDist;
-        e.hopToY = e.y + Math.sin(a) * def.hopDist;
+        const dx = p.x - e.x, dy = p.y - e.y;
+        const d = Math.hypot(dx, dy) || 1;
+        e.hopToX = e.x + (dx / d) * def.hopDist;
+        e.hopToY = e.y + (dy / d) * def.hopDist;
       }
     } else if (e.state === 'hop') {
       const k = 1 - e.hopT / def.hopTime;
       const nx = e.hopFromX + (e.hopToX - e.hopFromX) * k;
       const ny = e.hopFromY + (e.hopToY - e.hopFromY) * k;
-      const moved = moveCircle(this.dungeon, e.x, e.y, e.moveRadius, nx - e.x, ny - e.y);
+      const moved = moveField(e.x, e.y, e.moveRadius, nx - e.x, ny - e.y);
       e.x = moved.x; e.y = moved.y;
       e.moving = true;
       if (e.hopT <= 0) {
@@ -667,9 +650,7 @@ export class Game {
         e.state = 'pause';
         e.stateT = def.pauseTime;
       } else {
-        e.repathT -= dt;
-        if (e.repathT <= 0 || !e.path || e.pathI >= e.path.length) this.repath(e, p.x, p.y);
-        this.followPath(e, dt, e.speed);
+        this.moveToward(e, p.x, p.y, dt, e.speed);
       }
     }
   }
@@ -680,17 +661,19 @@ export class Game {
     if (e.state === 'aim') {
       e.stateT -= dt;
       e.moving = false;
-      // Aim is LOCKED at aim start (e.aimAngle): the aim line shows where
+      // Aim is LOCKED at aim start (aimX/aimY): the aim line shows where
       // the bolt will go, and the player dodges by leaving that line.
       // (Tracking the player made the bolt undodgeable.)
       this.setAimTelegraph(e);
       if (e.stateT <= 0) {
         e.state = 'chase';
         e.attackCd = def.attackCd;
-        const a = e.aimAngle;
+        const dx = e.aimX - e.x, dy = e.aimY - e.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const ux = dx / d, uy = dy / d;
         this.projectiles.push(createProjectile(
-          e.x + Math.cos(a) * 12, e.y + Math.sin(a) * 12,
-          Math.cos(a) * def.boltSpeed, Math.sin(a) * def.boltSpeed,
+          e.x + ux * 12, e.y + uy * 12,
+          ux * def.boltSpeed, uy * def.boltSpeed,
           def.damage, 'tinket', 3,
         ));
         this.clearAimTelegraph(e);
@@ -702,11 +685,8 @@ export class Game {
         e.state = 'aim';
         e.stateT = def.aimTime;
         e.aimX = p.x; e.aimY = p.y;
-        e.aimAngle = Math.atan2(p.y - e.y, p.x - e.x);
       } else {
-        e.repathT -= dt;
-        if (e.repathT <= 0 || !e.path || e.pathI >= e.path.length) this.repath(e, p.x, p.y);
-        this.followPath(e, dt, e.speed);
+        this.moveToward(e, p.x, p.y, dt, e.speed);
       }
     }
   }
@@ -756,9 +736,7 @@ export class Game {
         e.state = 'root';
         e.stateT = def.rootTime;
       } else {
-        e.repathT -= dt;
-        if (e.repathT <= 0 || !e.path || e.pathI >= e.path.length) this.repath(e, p.x, p.y);
-        this.followPath(e, dt, e.speed);
+        this.moveToward(e, p.x, p.y, dt, e.speed);
       }
     }
   }
@@ -783,9 +761,7 @@ export class Game {
     if (b.state === 'chase') {
       b.stateT -= dt;
       b.moving = true;
-      b.repathT -= dt;
-      if (b.repathT <= 0 || !b.path || b.pathI >= b.path.length) this.repath(b, p.x, p.y);
-      this.followPath(b, dt, moveSpeed);
+      this.moveToward(b, p.x, p.y, dt, moveSpeed);
       if (d < b.radius + p.radius) this.damagePlayer(BOSS.contactDamage, 'boss');
       if (b.stateT <= 0) this.bossStartPattern();
       return;
@@ -823,12 +799,15 @@ export class Game {
       b.telegraphing = true;
       b.moving = false;
       if (b.stateT <= 0) {
-        const base = Math.atan2(p.y - b.y, p.x - b.x);
+        const dx = p.x - b.x, dy = p.y - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const ux = dx / d, uy = dy / d;
         for (let i = 0; i < BOSS.fanShards; i++) {
-          const a = base + ((i - (BOSS.fanShards - 1) / 2) * BOSS.fanSpreadDeg * Math.PI) / 180;
+          const o = FAN_OFF[i];
+          const vx = ux * o.c - uy * o.s, vy = ux * o.s + uy * o.c;
           this.projectiles.push(createProjectile(
-            b.x + Math.cos(a) * 20, b.y + Math.sin(a) * 20,
-            Math.cos(a) * BOSS.fanSpeed, Math.sin(a) * BOSS.fanSpeed,
+            b.x + vx * 20, b.y + vy * 20,
+            vx * BOSS.fanSpeed, vy * BOSS.fanSpeed,
             BOSS.fanDamage, 'shard', BOSS.fanLife,
           ));
         }
@@ -845,8 +824,9 @@ export class Game {
       b.moving = false;
       // Markers follow the player's position at cast time (fixed at start).
       if (!b.echoMarks.length) {
-        const base = Math.atan2(p.y - b.y, p.x - b.x);
-        const px = -Math.sin(base), py = Math.cos(base);
+        const dx = p.x - b.x, dy = p.y - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const px = -(dy / d), py = dx / d;
         b.echoMarks = [
           { x: p.x, y: p.y },
           { x: p.x + px * BOSS.echoOffsets, y: p.y + py * BOSS.echoOffsets },
@@ -900,8 +880,7 @@ export class Game {
       const pr = this.projectiles[i];
       pr.life -= dt;
       const nx = pr.x + pr.vx * dt, ny = pr.y + pr.vy * dt;
-      const tx = Math.floor(nx / TILE), ty = Math.floor(ny / TILE);
-      if (pr.life <= 0 || !isFloor(this.dungeon, tx, ty)) {
+      if (pr.life <= 0 || nx < 0 || nx > FIELD_W || ny < 0 || ny > FIELD_H) {
         this.projectiles.splice(i, 1);
         continue;
       }
@@ -938,17 +917,20 @@ export class Game {
       const l = this.loot[i];
       l.life -= dt;
       if (l.life <= 0) { this.loot.splice(i, 1); continue; }
-      // Scatter velocity decays.
+      // Scatter velocity decays; the field edge just stops the slide.
       l.x += l.vx * dt;
       l.y += l.vy * dt;
       l.vx *= 0.9; l.vy *= 0.9;
-      if (!circleFits(this.dungeon, l.x, l.y, 6)) { l.x -= l.vx * dt; l.y -= l.vy * dt; l.vx = 0; l.vy = 0; }
+      const cx = Math.max(6, Math.min(FIELD_W - 6, l.x)), cy = Math.max(6, Math.min(FIELD_H - 6, l.y));
+      if (cx !== l.x || cy !== l.y) { l.vx = 0; l.vy = 0; }
+      l.x = cx; l.y = cy;
       const d = dist(l.x, l.y, p.x, p.y);
       const collectR = l.kind === 'heart' || l.kind === 'bigheart' ? LOOT.collectHeart : LOOT.collectCoin;
       if (d <= LOOT.magnetRange) {
-        const a = Math.atan2(p.y - l.y, p.x - l.x);
-        l.x += Math.cos(a) * LOOT.magnetSpeed * dt;
-        l.y += Math.sin(a) * LOOT.magnetSpeed * dt;
+        const dx = p.x - l.x, dy = p.y - l.y;
+        const dl = Math.hypot(dx, dy) || 1;
+        l.x += (dx / dl) * LOOT.magnetSpeed * dt;
+        l.y += (dy / dl) * LOOT.magnetSpeed * dt;
       }
       if (dist(l.x, l.y, p.x, p.y) <= collectR) {
         if (l.kind === 'coin') {
@@ -1015,7 +997,7 @@ export class Game {
 
   updateChests() {
     const p = this.player;
-    for (const c of this.dungeon.chests) {
+    for (const c of this.field.chests) {
       if (c.opened) continue;
       if (dist(c.x, c.y, p.x, p.y) <= 36) {
         c.opened = true;
@@ -1030,9 +1012,36 @@ export class Game {
     }
   }
 
+  // Static field pickups (Genshin-style collectibles): walk over them.
+  // gem = +1 shard (+25), coin pile = +3 coins (+6), heart = +20 HP.
+  updatePickups() {
+    const p = this.player;
+    for (const pk of this.pickups) {
+      if (pk.taken) continue;
+      const r = pk.kind === 'heart' ? 28 : 36;
+      if (dist(pk.x, pk.y, p.x, p.y) <= r) {
+        pk.taken = true;
+        if (pk.kind === 'gem') {
+          this.shards++;
+          this.score += LOOT.shardScore;
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+25', '#7fb8ff', 18);
+        } else if (pk.kind === 'coins') {
+          this.coins += 3;
+          this.score += 3 * LOOT.coinScore;
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6', '#ffd76a', 18);
+        } else {
+          p.hp = Math.min(p.maxHp, p.hp + LOOT.heartHeal);
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, `+${LOOT.heartHeal}`, '#6fe08a', 18);
+        }
+        this.audio.play('coin');
+        this.updateHUD();
+      }
+    }
+  }
+
   updateStatues(dt) {
     const p = this.player;
-    for (const s of this.dungeon.statues) {
+    for (const s of this.field.statues) {
       if (s.used) continue;
       if (dist(s.x, s.y, p.x, p.y) <= 42) {
         s.channel = (s.channel || 0) + dt;
@@ -1069,7 +1078,7 @@ export class Game {
       maxHp: this.player.maxHp,
       coins: this.coins,
       shards: this.shards,
-      dungeonHash: hashTiles(this.dungeon.grid),
+      fieldHash: this.field.hash,
     };
     try {
       const best = Number(localStorage.getItem('mosslight-best') || 0);
@@ -1093,17 +1102,19 @@ export class Game {
       if (tg.kind === 'ring') {
         const d = dist(p.x, p.y, tg.x, tg.y);
         if (d < tg.r + r + 12) {
-          const a = Math.atan2(p.y - tg.y, p.x - tg.x);
-          return { x: Math.cos(a), y: Math.sin(a) };
+          const dx = p.x - tg.x, dy = p.y - tg.y;
+          const dl = Math.hypot(dx, dy) || 1;
+          return { x: dx / dl, y: dy / dl };
         }
       }
     }
     // Boss fan: the shards fly at the player, so strafe sideways.
     const boss = this.boss;
     if (boss && boss.state === 'fanTel') {
-      const a = Math.atan2(p.y - boss.y, p.x - boss.x);
+      const dx = p.x - boss.x, dy = p.y - boss.y;
+      const dl = Math.hypot(dx, dy) || 1;
       const s = this.bot.orbitDir || 1;
-      return { x: -Math.sin(a) * s, y: Math.cos(a) * s };
+      return { x: -(dy / dl) * s, y: (dx / dl) * s };
     }
     // Tinket aim line: step off the line (perpendicular).
     for (const tg of this.telegraphs) {
@@ -1114,8 +1125,8 @@ export class Game {
         tt = Math.max(0, Math.min(1, tt));
         const cx = tg.x0 + dx * tt, cy = tg.y0 + dy * tt;
         if (dist(p.x, p.y, cx, cy) < 26) {
-          const a = Math.atan2(dy, dx);
-          return { x: -Math.sin(a), y: Math.cos(a) };
+          const dl = Math.hypot(dx, dy) || 1;
+          return { x: -(dy / dl), y: dx / dl };
         }
       }
     }
@@ -1130,12 +1141,12 @@ export class Game {
     if (Math.hypot(p.x - b.lastX, p.y - b.lastY) < 0.5) b.stuckT += dt;
     else { b.stuckT = 0; b.lastX = p.x; b.lastY = p.y; }
     if (b.stuckT > 1.5) {
-      const a = this.rng.f() * Math.PI * 2;
-      b.wanderX = Math.cos(a); b.wanderY = Math.sin(a);
+      const u = this.rng.unit();
+      b.wanderX = u.x; b.wanderY = u.y;
       b.wanderT = 0.7;
       b.stuckT = 0;
     }
-    // Telegraph dodge (highest priority): move directly, skip the BFS path.
+    // Telegraph dodge (highest priority): move directly.
     let dodged = false;
     let dodge = this.botDodgeDir();
     if (!dodge && b.wanderT > 0) {
@@ -1143,9 +1154,10 @@ export class Game {
       dodge = { x: b.wanderX, y: b.wanderY };
     }
     if (dodge) {
-      const moved = moveCircle(this.dungeon, p.x, p.y, p.moveRadius, dodge.x * p.speed * dt, dodge.y * p.speed * dt);
+      const moved = moveField(p.x, p.y, p.moveRadius, dodge.x * p.speed * dt, dodge.y * p.speed * dt);
       p.x = moved.x; p.y = moved.y;
-      p.faceAngle = Math.atan2(dodge.y, dodge.x);
+      p.fx = dodge.x; p.fy = dodge.y; // dodge dir is already a unit vector
+      p.faceAngle = Math.atan2(dodge.y, dodge.x); // renderer only
       p.moving = true;
       dodged = true;
     }
@@ -1156,19 +1168,21 @@ export class Game {
       const d = dist(p.x, p.y, this.boss.x, this.boss.y);
       b.orbitT -= dt;
       if (b.orbitT <= 0) { b.orbitDir *= -1; b.orbitT = 2; }
-      const a = Math.atan2(p.y - this.boss.y, p.x - this.boss.x);
+      const dx = p.x - this.boss.x, dy = p.y - this.boss.y;
+      const dl = Math.hypot(dx, dy) || 1;
+      const ux = dx / dl, uy = dy / dl;
       if (d < 140) {
         // Back away along the radial.
-        tx = this.boss.x + Math.cos(a) * 175;
-        ty = this.boss.y + Math.sin(a) * 175;
+        tx = this.boss.x + ux * 175;
+        ty = this.boss.y + uy * 175;
       } else if (d > 175) {
-        tx = this.boss.x + Math.cos(a) * 155;
-        ty = this.boss.y + Math.sin(a) * 155;
+        tx = this.boss.x + ux * 155;
+        ty = this.boss.y + uy * 155;
       } else {
-        // Orbit tangentially.
-        const ta = a + b.orbitDir * 0.5;
-        tx = this.boss.x + Math.cos(ta) * 160;
-        ty = this.boss.y + Math.sin(ta) * 160;
+        // Orbit tangentially: rotate the radial by +/-0.5 rad.
+        const s = SIN05 * b.orbitDir;
+        tx = this.boss.x + (ux * COS05 - uy * s) * 160;
+        ty = this.boss.y + (ux * s + uy * COS05) * 160;
       }
       mode = 'boss';
     } else if (this.enemies.length) {
@@ -1179,82 +1193,42 @@ export class Game {
         if (d < nd) { nd = d; near = e; }
       }
       if (near) {
-        const a = Math.atan2(p.y - near.y, p.x - near.x);
+        const dx = p.x - near.x, dy = p.y - near.y;
+        const dl = Math.hypot(dx, dy) || 1;
+        const ux = dx / dl, uy = dy / dl;
         if (nd < 70) {
-          tx = p.x + Math.cos(a) * 90;
-          ty = p.y + Math.sin(a) * 90;
+          tx = p.x + ux * 90;
+          ty = p.y + uy * 90;
         } else if (nd > 165) {
           tx = near.x; ty = near.y;
         } else {
-          // Strafe: hold range, drift sideways.
-          const ta = a + 0.6;
-          tx = near.x + Math.cos(ta) * 150;
-          ty = near.y + Math.sin(ta) * 150;
+          // Strafe: hold range, drift sideways (rotate radial by 0.6 rad).
+          tx = near.x + (ux * COS06 - uy * SIN06) * 150;
+          ty = near.y + (ux * SIN06 + uy * COS06) * 150;
         }
         mode = 'chase';
       }
     } else {
-      // Nothing to fight: walk to the centre of the nearest room of the
-      // current area so the next spawn group finds the player nearby.
-      const def = WAVES[this.wave - 1];
-      const rooms = this.dungeon.rooms.filter((r) => r.area === def.area);
-      let room = rooms[0], rd = Infinity;
-      for (const r of rooms) {
-        const cx = (r.x + r.w / 2) * TILE, cy = (r.y + r.h / 2) * TILE;
-        const d = dist(p.x, p.y, cx, cy);
-        if (d < rd) { rd = d; room = r; }
-      }
-      tx = (room.x + room.w / 2) * TILE;
-      ty = (room.y + room.h / 2) * TILE;
+      // Nothing to fight: drift toward the field centre so the next
+      // spawn group finds the player nearby.
+      tx = FIELD_W / 2;
+      ty = FIELD_H / 2;
       mode = 'idle';
     }
-    // Follow the target with BFS (repath every 1s or on target change).
+    // Open field: walk straight at the target (no walls, no pathfinding).
     if (dodged) {
       // Already moved directly (dodge / wander); nothing more here.
     } else if (tx !== null) {
-      const changed = !b.target || Math.hypot(tx - b.target.x, ty - b.target.y) > 40;
-      b.repathT -= dt;
-      if (changed || b.repathT <= 0 || b.pathI >= b.path.length) {
-        b.target = { x: tx, y: ty };
-        b.path = findPath(this.dungeon, p.x, p.y, tx, ty);
-        if (!b.path.length) {
-          // Unreachable target (fleeing into a wall while cornered):
-          // try the same distance at 90-degree rotations until one works.
-          const d0 = Math.hypot(tx - p.x, ty - p.y) || 90;
-          const a0 = Math.atan2(ty - p.y, tx - p.x);
-          for (const da of [Math.PI / 2, -Math.PI / 2, Math.PI]) {
-            const ax = p.x + Math.cos(a0 + da) * d0, ay = p.y + Math.sin(a0 + da) * d0;
-            const alt = findPath(this.dungeon, p.x, p.y, ax, ay);
-            if (alt.length) { b.target = { x: ax, y: ay }; b.path = alt; break; }
-          }
-        }
-        b.pathI = 0;
-        b.repathT = 1;
-      }
-      if (b.path && b.pathI < b.path.length) {
-        const wp = b.path[b.pathI];
-        const dx = wp.x - p.x, dy = wp.y - p.y;
-        const d = Math.hypot(dx, dy);
-        if (d < 10) { b.pathI++; }
-        else {
-          const mx = dx / d, my = dy / d;
-          const moved = moveCircle(this.dungeon, p.x, p.y, p.moveRadius, mx * p.speed * dt, my * p.speed * dt);
-          p.x = moved.x; p.y = moved.y;
-          p.faceAngle = Math.atan2(my, mx);
-          p.moving = true;
-        }
+      const dx = tx - p.x, dy = ty - p.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 8) {
+        const moved = moveField(p.x, p.y, p.moveRadius, (dx / d) * p.speed * dt, (dy / d) * p.speed * dt);
+        p.x = moved.x; p.y = moved.y;
+        p.fx = dx / d; p.fy = dy / d;
+        p.faceAngle = Math.atan2(dy, dx); // renderer only
+        p.moving = true;
       } else {
-        // No path (already there or blocked): walk straight.
-        const dx = tx - p.x, dy = ty - p.y;
-        const d = Math.hypot(dx, dy);
-        if (d > 8) {
-          const moved = moveCircle(this.dungeon, p.x, p.y, p.moveRadius, (dx / d) * p.speed * dt, (dy / d) * p.speed * dt);
-          p.x = moved.x; p.y = moved.y;
-          p.faceAngle = Math.atan2(dy, dx);
-          p.moving = true;
-        } else {
-          p.moving = false;
-        }
+        p.moving = false;
       }
     } else {
       p.moving = false;
@@ -1346,10 +1320,10 @@ export class Game {
     if (!cv) return;
     const ctx = cv.getContext('2d');
     const S = cv.width; // square canvas
-    // Uniform scale (the world is 768x576, 4:3): keep proportions, centre
-    // the shorter side vertically. The old sx/sy stretched tiles.
-    const s = S / WORLD_W;
-    const offY = (S - WORLD_H * s) / 2;
+    // Uniform scale (the field is 2400x1800, 4:3): keep proportions,
+    // centre the shorter side vertically.
+    const s = S / FIELD_W;
+    const offY = (S - FIELD_H * s) / 2;
     const px = (x) => x * s;
     const py = (y) => offY + y * s;
     ctx.clearRect(0, 0, S, S);
@@ -1358,19 +1332,20 @@ export class Game {
     ctx.beginPath();
     ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
     ctx.clip();
-    ctx.fillStyle = '#141420';
-    ctx.fillRect(0, 0, S, S);
     const pal = AREAS[this.area];
-    // Walls first (visible tone), then bright floor tiles on top.
-    for (let ty = 0; ty < GRID_H; ty++) {
-      for (let tx = 0; tx < GRID_W; tx++) {
-        const floor = isFloor(this.dungeon, tx, ty);
-        ctx.fillStyle = floor ? pal.floor : (pal.mapWall || pal.wallTop);
-        ctx.globalAlpha = floor ? 1 : 0.95;
-        ctx.fillRect(px(tx * TILE), py(ty * TILE), TILE * s + 0.6, TILE * s + 0.6);
+    // Fill the whole circle with ground colour first: the field is 4:3
+    // inside a round map, so the bands above/below it must read as
+    // terrain, never as black empty space.
+    ctx.fillStyle = pal.floor;
+    ctx.fillRect(0, 0, S, S);
+    // Open field: the whole map is terrain — coarse checker for texture.
+    const cell = 150; // px per checker cell, world scale
+    for (let gy = 0; gy < FIELD_H / cell; gy++) {
+      for (let gx = 0; gx < FIELD_W / cell; gx++) {
+        ctx.fillStyle = (gx + gy) % 2 ? pal.floor : pal.floorAlt;
+        ctx.fillRect(px(gx * cell), py(gy * cell), cell * s + 0.6, cell * s + 0.6);
       }
     }
-    ctx.globalAlpha = 1;
     const dot = (x, y, r, fill) => {
       ctx.fillStyle = fill;
       ctx.beginPath();
@@ -1432,8 +1407,8 @@ export class Game {
       body.innerHTML = `Score <b>${this.done.score}</b> &nbsp;·&nbsp; Best ${this.done.best}<br>` +
         `Wave ${this.done.wave} / ${WAVE_COUNT} &nbsp;·&nbsp; ${this.done.kills} kills &nbsp;·&nbsp; ${this.done.time}s<br>` +
         (this.done.result === 'victory'
-          ? 'You defeated the Gloam Bell and relit the dungeon!'
-          : 'The dungeon keeps its light… for now.');
+          ? 'You defeated the Gloam Bell and relit the wilds!'
+          : 'The wilds keep their light… for now.');
     }
     panel.style.display = 'block';
   }
