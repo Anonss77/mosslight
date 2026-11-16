@@ -1,1596 +1,1489 @@
-// Mosslight — game orchestration: state machine, waves, combat, rendering,
-// HUD, minimap, the deterministic autotest bot, and screenshot hooks.
-// All sim numbers come from config.js; all randomness from the run RNG.
+// Mosslight v4 — game orchestration: state machine, waves, combat, boss
+// AI, loot, upgrades, score, the deterministic autotest bot, HUD, minimap,
+// and the screenshot/autotest hooks the verification tools poll.
+// All sim numbers come from config.js; all gameplay randomness from the
+// run RNG; the visual RNG feeds particles and decor only. The simulation
+// runs in px units on the 48x36 tile dungeon; world.js renders it in 3D.
 
 import {
-  VIEW_W, VIEW_H, TILE, WORLD_W, WORLD_H, SCALE, STEP, AREAS, areaOfWave,
-  WAVES, WAVE_LEN, GROUP_EVERY, INTERMISSION_LEN, MAX_ENEMIES, MIN_SPAWN_DIST,
-  HERO, SKILLS, ENEMIES, BOSS, LOOT, SCORE, FEEL,
+  TILE, WORLD_W, WORLD_H, GRID_W, GRID_H,
+  WAVE_TIME, INTERMISSION_TIME, WAVE_COUNT, WAVES, AREA_NAMES, AREAS,
+  MAX_ENEMIES, SPAWN_GROUP_EVERY, SPAWN_MIN_DIST,
+  VICTORY_BONUS, DEFEAT_PER_WAVE,
+  PLAYER, SKILLS, ENEMIES, BOSS, LOOT, UPGRADES, FEEL,
 } from './config.js';
-import { Rng } from './random.js';
-import { Dungeon, bakeLayer } from './dungeon.js';
-import { buildSprites } from './sprites.js';
-import { Ambient, makeVignette, bakeInteractiveSprites, kindFor, KIND_TABLE, INTERACTIVE_SIZE } from './decor.js';
-import { Sfx } from './audio.js';
-import { Input } from './input.js';
+import { makeRng } from './random.js';
 import {
-  Player, Enemy, Boss, Projectiles, Loot, Particles, DamageNumbers,
-  EmberPatches, SpatialHash,
+  generateDungeon, hashTiles, tileAt, isFloor, circleFits, moveCircle,
+  findPath, spawnPoint, roomAt, randomPointInRoom,
+} from './dungeon.js';
+import {
+  SpatialHash, freshIds,
+  createPlayer, createEnemy, createBoss, createProjectile, createLoot,
+  burstParticles, updateParticles, addDamageNumber, updateDamageNumbers,
+  resetStagger,
 } from './entities.js';
 
-const $ = (id) => document.getElementById(id);
+export const STEP = 1 / 60; // fixed timestep, seconds
+
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
 export class Game {
-  constructor(canvas) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
-    this.ctx.imageSmoothingEnabled = false;
-    this.sprites = buildSprites();
-    this.sfx = new Sfx();
-    this.input = new Input(canvas);
-    this.hash = new SpatialHash();
+  constructor(world, audio, opts = {}) {
+    this.world = world;
+    this.audio = audio;
+    this.opts = opts; // {seed, autotest, shot, speed}
+    this.seed = opts.seed ?? 20261116;
+    this.rng = makeRng(this.seed);
+    this.vrng = makeRng((this.seed ^ 0x51ab3f) >>> 0);
     this.state = 'title';
-    this.botMode = false;
-    this.frozen = false;          // shot freeze: render continues, sim stops
-    this.speed = 1;               // sim steps per frame (accelerated in tests)
-    this.hitStop = 0;
-    this.shakeT = 0; this.shakeMag = 0;
-    this.time = 0;                // total sim time (seconds)
-    this.frame = 0;
-    this.shotReady = false;
-    this.done = null;             // autotest result
-    this.bot = { stuckT: 0, lastX: 0, lastY: 0, wanderT: 0, wanderX: 0, wanderY: 0 };
-    this.botSkills = [];
-    this.botMove = { x: 0, y: 0 };
-    this.interBotT = 0;
-    // v2 visuals (all decorative; no gameplay state here).
-    this.ambient = null;
-    this.vignette = null;
-    this.interSprites = bakeInteractiveSprites();
-    this.interState = [];
-    this.rings = [];
-    this.lastSkillPos = null;
-    this.mothPhase = 0;
-    this.lanternSeed = 0;
-    this.bindUi();
-    this.showTitle();
-  }
-
-  // ---------------------------------------------------------- UI wiring
-  bindUi() {
-    this.input.bindJoystick($('joystick'), $('joyThumb'));
-    for (const s of SKILLS) this.input.bindSkillButton($('skill-' + s.id), s.id);
-    $('startBtn').addEventListener('click', () => {
-      this.sfx.ensure();
-      const seed = parseInt($('seedInput').value, 10);
-      this.startRun(Number.isFinite(seed) ? seed : (Math.random() * 1e9) | 0);
-    });
-    $('seedInput').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') $('startBtn').click();
-    });
-    $('skipBtn').addEventListener('click', () => this.endIntermission(null));
-    $('resumeBtn').addEventListener('click', () => this.setState('playing'));
-    $('restartBtn').addEventListener('click', () => this.startRun(this.seed));
-    $('quitBtn').addEventListener('click', () => this.showTitle());
-    $('againBtn').addEventListener('click', () => this.startRun(this.seed));
-    $('titleBtn').addEventListener('click', () => this.showTitle());
-    $('muteBtn').addEventListener('click', () => {
-      this.sfx.muted = !this.sfx.muted;
-      $('muteBtn').textContent = this.sfx.muted ? '🔇' : '🔊';
-    });
-    // Title hero portrait: the baked Neri sprite as a data URL.
-    const heroImg = $('titleHero');
-    if (heroImg) heroImg.src = this.sprites.neri[0].toDataURL();
-    const mothImg = $('titleMoth');
-    if (mothImg) mothImg.src = this.sprites.moth[0].toDataURL();
-  }
-
-  setState(s) {
-    this.state = s;
-    for (const id of ['title', 'hud', 'intermission', 'pausePanel', 'result']) {
-      $(id).classList.toggle('hidden', id !== s && !(s === 'playing' && id === 'hud'));
-    }
-    $('hud').classList.toggle('hidden', s === 'title' || s === 'victory' || s === 'defeat');
-    $('title').classList.toggle('hidden', s !== 'title');
-    $('intermission').classList.toggle('hidden', s !== 'intermission');
-    $('pausePanel').classList.toggle('hidden', s !== 'paused');
-    $('result').classList.toggle('hidden', s !== 'victory' && s !== 'defeat');
-  }
-
-  showTitle() {
-    this.setState('title');
-    const best = JSON.parse(localStorage.getItem('mosslight-best') || '{"score":0,"wave":0,"coins":0}');
-    $('bestScore').textContent = `Best: ${best.score} pts · Wave ${best.wave} · ${best.coins} coins`;
-    if (!$('seedInput').value) $('seedInput').value = String((Math.random() * 1e9) | 0);
-  }
-
-  // ---------------------------------------------------------- run setup
-  startRun(seed) {
-    this.seed = seed;
-    this.rng = new Rng(seed);
-    this.dungeon = new Dungeon(seed);
-    this.layer = bakeLayer(this.dungeon, 0);
-    this.area = 0;
-    const start = this.dungeon.playerStart();
-    this.player = new Player(start.x, start.y);
-    this.enemies = [];
-    this.boss = null;
-    this.projectiles = new Projectiles();
-    this.loot = new Loot();
-    this.loot.onCollect = (l) => this.collectLoot(l);
-    this.particles = new Particles();
-    this.dmgNums = new DamageNumbers();
-    this.embers = new EmberPatches();
-    this.wave = 1;
-    this.waveT = WAVE_LEN;
-    this.groupsSpawned = 0;
+    this.time = 0; // sim time, seconds (deterministic)
+    this.wave = 0;
+    this.waveT = 0; // wave timer
     this.interT = 0;
-    this.offers = [];
-    this.kills = 0;
+    this.groupsSpawned = 0;
+    this.spawnT = 0;
+    this.score = 0;
     this.coins = 0;
     this.shards = 0;
-    this.score = 0;
-    this.time = 0;
-    this.frame = 0;
-    this.hitStop = 0;
-    this.victoryT = 0;
-    this.warnT = 0;
-    this.slashT = 0;
-    this.starfallFx = null;
-    this.cam = { x: 0, y: 0 };
-    this.camOffset = { x: 0, y: 0 }; // shot staging only (visual)
-    this.done = null;
-    this.shotReady = false;
-    // v2 visuals: ambient particles + vignette + interactive prop state.
-    // Visual seeds derive from the seed directly — the run RNG stream is
-    // never consumed for visuals, so v1 run behaviour is unchanged.
-    // Interactive-reaction bursts use a separate visual RNG for the same
-    // reason (they fire during play and must not shift gameplay rolls).
-    this.visualRng = new Rng((seed ^ 0x51ab3f) >>> 0);
-    this.ambient = new Ambient(seed);
-    this.ambient.setArea(0);
-    this.vignette = makeVignette(0.04);
-    this.interState = this.initInteractive();
-    this.rings = [];
-    this.lastSkillPos = null;
-    this.mothPhase = (seed % 1000) / 1000 * Math.PI * 2;
-    this.lanternSeed = ((seed * 7) % 1000) / 1000 * Math.PI * 2;
-    this.setState('playing');
-    this.sfx.ensure();
-  }
-
-  // One reaction state per interactive prop slot in the current area.
-  initInteractive() {
-    const decor = this.dungeon.decor;
-    if (!decor) return [];
-    return decor.slots.inter.map((s) => ({
-      slot: s, kind: kindFor(s, this.area, 'inter'),
-      tilt: 0, tiltT: 0, glow: 0, glowT: 0, broken: false,
-      sparkT: 0, flare: 0, open: 0, rot: 0,
-    }));
-  }
-
-  // Interactive prop reactions (Astra §5, all visual-only).
-  // Proximity rules per kind; skill casts trigger break/sparkle/flash.
-  updateInteractive(dt) {
-    const p = this.player;
-    if (!p || !p.alive) return;
-    const sk = this.lastSkillPos;
-    for (const st of this.interState) {
-      if (st.broken) continue;
-      const s = st.slot;
-      const d = Math.hypot(p.x - s.x, p.y - s.y);
-      const dSk = sk ? Math.hypot(sk.x - s.x, sk.y - s.y) : Infinity;
-      st.tiltT = Math.max(0, st.tiltT - dt);
-      st.glowT = Math.max(0, st.glowT - dt);
-      st.sparkT = Math.max(0, st.sparkT - dt);
-      if (st.kind === 'flower') {
-        // Glowcap flowers tilt 12° toward Neri within 28px.
-        if (d < 28) { st.tilt = (p.x >= s.x ? 1 : -1) * (12 * Math.PI / 180); st.tiltT = 0.3; }
-        else if (st.tiltT <= 0) st.tilt *= 0.9;
-      } else if (st.kind === 'pot') {
-        // Root pots break when a skill lands within 40px (4 fragments).
-        if (dSk < 40) {
-          st.broken = true;
-          this.particles.burst(s.x, s.y, 4, ['#8A5548', '#6FCB73', '#A7E68A'], this.visualRng, 80);
-        }
-      } else if (st.kind === 'vine') {
-        // Wall lantern vines brighten when a skill passes within 56px.
-        if (dSk < 56) st.glow = 1;
-        else st.glow = Math.max(0, st.glow - dt / 0.8);
-      } else if (st.kind === 'brazier') {
-        // Cinder braziers flare with Neri's distance (within 48px).
-        const target = d < 48 ? 1 : 0;
-        st.flare += (target - st.flare) * Math.min(1, dt * 6);
-      } else if (st.kind === 'rack') {
-        // Cyan glass racks sparkle when skills pass within 48px.
-        if (dSk < 48 && st.sparkT <= 0) {
-          st.sparkT = 0.5;
-          this.particles.burst(s.x, s.y - 6, 3, ['#B2FFFF', '#FFFFFF', '#65D5D5'], this.visualRng, 50);
-        }
-      } else if (st.kind === 'gear') {
-        // Loose gear piles shift when Neri passes within 20px.
-        if (d < 20) { st.rot = (p.x >= s.x ? 1 : -1) * 0.15; st.sparkT = 0.3; }
-        else st.rot *= 0.9;
-      } else if (st.kind === 'starflower') {
-        // Starflowers open with Neri's distance (within 40px).
-        const target = d < 40 ? 1 : 0;
-        st.open += (target - st.open) * Math.min(1, dt * 5);
-      } else if (st.kind === 'crystal') {
-        // Crystal clusters glow with Neri's distance (within 56px).
-        const target = d < 56 ? 1 : 0;
-        st.glow += (target - st.glow) * Math.min(1, dt * 5);
-      } else if (st.kind === 'rune') {
-        // Floating runes flash when skills pass within 48px.
-        if (dSk < 48) st.glow = 1;
-        else st.glow = Math.max(0, st.glow - dt / 0.6);
-      }
-    }
-  }
-
-  // ---------------------------------------------------------- main loop
-  loop = (t) => {
-    requestAnimationFrame(this.loop);
-    const steps = this.state === 'title' ? 1 : this.speed;
-    for (let i = 0; i < steps; i++) {
-      if (this.hitStop > 0) { this.hitStop--; }
-      else this.update(STEP);
-      this.frame++;
-    }
-    if (!this.headless) { this.render(); this.updateHud(); }
-  };
-
-  start() { requestAnimationFrame(this.loop); }
-
-  update(dt) {
-    if (this.frozen) return;
-    this.time += dt;
-    if (this.input.takePause() && (this.state === 'playing' || this.state === 'paused')) {
-      this.setState(this.state === 'playing' ? 'paused' : 'playing');
-      return;
-    }
-    if (this.state === 'title' || this.state === 'paused' || this.state === 'shot') return;
-    if (this.state === 'victory' || this.state === 'defeat') {
-      this.particles.update(dt);
-      this.dmgNums.update(dt);
-      return;
-    }
-    if (this.state === 'intermission') {
-      this.interT -= dt;
-      this.particles.update(dt);
-      this.dmgNums.update(dt);
-      if (this.botMode) {
-        this.interBotT -= dt;
-        if (this.interBotT <= 0) this.endIntermission(this.botChooseOffer());
-      }
-      if (this.interT <= 0) this.endIntermission('auto');
-      return;
-    }
-    // state === 'playing'
-    if (this.botMode) this.botThink();
-    this.updatePlayer(dt);
-    this.updateEnemies(dt);
-    if (this.boss) this.updateBoss(dt);
-    this.projectiles.update(dt, this.dungeon);
-    this.loot.update(dt, this.player);
-    this.particles.update(dt);
-    this.dmgNums.update(dt);
-    // v2 visuals: ambient particles, death rings, interactive reactions.
-    if (this.ambient) this.ambient.update(dt, this.player.x, this.player.y);
-    for (let i = this.rings.length - 1; i >= 0; i--) {
-      this.rings[i].t += dt;
-      if (this.rings[i].t >= this.rings[i].dur) this.rings.splice(i, 1);
-    }
-    if (this.lastSkillPos) {
-      this.lastSkillPos.t -= dt;
-      if (this.lastSkillPos.t <= 0) this.lastSkillPos = null;
-    }
-    this.updateInteractive(dt);
-    for (const p of this.embers.update(dt)) this.emberTick(p);
-    this.updateWave(dt);
-    if (this.shakeT > 0) this.shakeT -= dt;
-    if (this.slashT > 0) this.slashT -= dt;
-    if (this.starfallFx) {
-      this.starfallFx.t -= dt;
-      if (this.starfallFx.t <= 0) this.starfallFx = null;
-    }
-    // Low-HP warning beep every 5s.
-    if (this.player.hp <= FEEL.lowHp && this.player.hp > 0) {
-      this.warnT -= dt;
-      if (this.warnT <= 0) { this.warnT = 5; this.sfx.warning(); }
-    }
-    // Victory celebration beat.
-    if (this.victoryT > 0) {
-      this.victoryT -= dt;
-      if (this.victoryT <= 0) this.finishVictory();
-    }
-    if (!this.player.alive) this.finishDefeat();
-  }
-
-  // ---------------------------------------------------------- player
-  updatePlayer(dt) {
-    const p = this.player;
-    if (!p.alive) return;
-    // Timers.
-    if (p.invuln > 0) p.invuln -= dt;
-    if (p.castT > 0) p.castT -= dt;   // cast frame (visual only)
-    if (p.hurtT > 0) p.hurtT -= dt;   // hurt frame (visual only)
-    if (p.shieldTime > 0) { p.shieldTime -= dt; if (p.shieldTime <= 0) p.shield = 0; }
-    for (const k of Object.keys(p.cooldowns)) if (p.cooldowns[k] > 0) p.cooldowns[k] -= dt;
-    p.energy = Math.min(HERO.maxEnergy, p.energy + HERO.energyRegen * dt);
-    // Starfall wind-up resolves into the blast.
-    if (p.starfallWindup > 0) {
-      p.starfallWindup -= dt;
-      if (p.starfallWindup <= 0) this.resolveStarfall();
-    }
-    // Movement (axis-separated so walls slide instead of sticking).
-    const mv = this.botMode ? this.botMove : this.input.moveVec();
-    p.moving = mv.x !== 0 || mv.y !== 0;
-    if (p.moving) {
-      p.facing = { x: mv.x, y: mv.y };
-      p.walkPhase += dt * 10;
-      const sp = HERO.speed;
-      const nx = p.x + mv.x * sp * dt;
-      if (!this.dungeon.hitsWall(nx, p.y, p.moveRadius)) p.x = nx;
-      const ny = p.y + mv.y * sp * dt;
-      if (!this.dungeon.hitsWall(p.x, ny, p.moveRadius)) p.y = ny;
-    }
-    // Glassguard thorns: moving through enemies hurts them.
-    if (p.shield > 0) {
-      const near = this.hash.query(p.x, p.y, p.radius + 14, []);
-      for (const e of near) {
-        if (e.thornT > 0) continue;
-        e.thornT = 0.5;
-        this.damageEnemy(e, 10, '#7FD4FF');
-      }
-    }
-    // Skills.
-    for (const id of this.input.takeSkills()) this.trySkill(id);
-    if (this.botMode) for (const id of this.botSkills.splice(0)) this.trySkill(id);
-    // Automatic lantern bolt: in the boss fight the boss is the priority
-    // target (the adds are the skills' job); an add only steals the bolt
-    // when it is right on top of the player (about to deal contact damage).
-    p.boltTimer -= dt;
-    if (p.boltTimer <= 0) {
-      let target = this.nearestEnemy(p.x, p.y, p.boltRange);
-      if (this.boss && !this.boss.dead) {
-        const bd = Math.hypot(this.boss.x - p.x, this.boss.y - p.y);
-        const ed = target ? Math.hypot(target.x - p.x, target.y - p.y) : Infinity;
-        if (bd <= p.boltRange && ed > 20) target = this.boss;
-      }
-      if (target) {
-        p.boltTimer = p.boltInterval;
-        const dx = target.x - p.x, dy = target.y - p.y;
-        const d = Math.hypot(dx, dy) || 1;
-        this.projectiles.spawn(p.x, p.y, (dx / d) * HERO.boltSpeed, (dy / d) * HERO.boltSpeed, p.boltDamage, 'player', 4, 2);
-        this.sfx.hit();
-      } else {
-        p.boltTimer = 0.1;
-      }
-    }
-    // Bolt hits.
-    for (let i = this.projectiles.list.length - 1; i >= 0; i--) {
-      const pr = this.projectiles.list[i];
-      if (pr.from !== 'player') continue;
-      const hit = this.enemyAt(pr.x, pr.y, pr.radius + 10);
-      if (hit) {
-        this.projectiles.list.splice(i, 1);
-        this.damageEnemy(hit, pr.damage, '#FFFFFF');
-        this.hitStop = Math.max(this.hitStop, FEEL.hitStopBolt);
-      }
-    }
-  }
-
-  trySkill(id) {
-    const p = this.player;
-    if (!p.alive || p.starfallWindup > 0) return;
-    const def = SKILLS.find((s) => s.id === id);
-    if (!def) return;
-    if (p.cooldowns[id] > 0 || p.energy < def.cost) return;
-    p.energy -= def.cost;
-    p.cooldowns[id] = def.cooldown;
-    p.castT = 0.16; // cast frame (visual only)
-    this.lastSkillPos = { x: p.x, y: p.y, t: 0.5 }; // interactive reactions
-    this.sfx.skill();
-    if (id === 'crescent') {
-      this.slashT = 0.15;
-      const near = this.hash.query(p.x, p.y, def.radius + 12, []);
-      for (const e of near) this.damageEnemy(e, def.damage + p.skillBonus.cut, def.color);
-      if (this.boss && !this.boss.dead && Math.hypot(this.boss.x - p.x, this.boss.y - p.y) < def.radius + this.boss.radius) {
-        this.damageBoss(def.damage + p.skillBonus.cut);
-      }
-      this.hitStop = Math.max(this.hitStop, FEEL.hitStopCut);
-    } else if (id === 'ember') {
-      // Aim: the boss first when it is in range, else the nearest enemy
-      // within aim range, else the facing direction.
-      let target = null;
-      if (this.boss && !this.boss.dead && Math.hypot(this.boss.x - p.x, this.boss.y - p.y) <= def.aimRange) target = this.boss;
-      else target = this.nearestEnemy(p.x, p.y, def.aimRange);
-      const ax = target ? target.x : p.x + p.facing.x * def.aimRange;
-      const ay = target ? target.y : p.y + p.facing.y * def.aimRange;
-      this.embers.spawn(ax, ay, def.damage, def.tickDamage + p.skillBonus.ember);
-      const near = this.hash.query(ax, ay, def.radius + 12, []);
-      for (const e of near) this.damageEnemy(e, def.damage, def.color);
-      if (this.boss && !this.boss.dead && Math.hypot(this.boss.x - ax, this.boss.y - ay) < def.radius + this.boss.radius) {
-        this.damageBoss(def.damage);
-      }
-    } else if (id === 'glassguard') {
-      p.shield = def.shield;
-      p.shieldTime = def.duration;
-      this.sfx.shield();
-    } else if (id === 'starfall') {
-      p.starfallWindup = def.windup;
-      this.starfallFx = { t: def.windup, x: p.x, y: p.y };
-    }
-  }
-
-  resolveStarfall() {
-    const p = this.player;
-    const def = SKILLS[3];
-    const dmg = def.damage + p.skillBonus.star;
-    const near = this.hash.query(p.x, p.y, def.radius + 14, []);
-    for (const e of near) {
-      this.damageEnemy(e, dmg, def.color);
-      const dx = e.x - p.x, dy = e.y - p.y;
-      const d = Math.hypot(dx, dy) || 1;
-      e.kbx += (dx / d) * 300; e.kby += (dy / d) * 300;
-    }
-    if (this.boss && !this.boss.dead && Math.hypot(this.boss.x - p.x, this.boss.y - p.y) < def.radius + this.boss.radius) {
-      this.damageBoss(dmg);
-    }
-    this.particles.burst(p.x, p.y, 20, ['#FFD76A', '#FFF3C4', '#FF8A2A'], this.rng, 200);
-    this.shake(FEEL.shakeStarfall[0], FEEL.shakeStarfall[1]);
-    this.hitStop = Math.max(this.hitStop, FEEL.hitStopStarfall);
-    this.sfx.skill();
-  }
-
-  emberTick(patch) {
-    const near = this.hash.query(patch.x, patch.y, patch.radius + 12, []);
-    for (const e of near) {
-      if (patch.hitIds.has(e.id)) continue;
-      patch.hitIds.add(e.id);
-      this.damageEnemy(e, patch.tickDamage, '#FF8A2A');
-    }
-    if (this.boss && !this.boss.dead && Math.hypot(this.boss.x - patch.x, this.boss.y - patch.y) < patch.radius + this.boss.radius) {
-      this.damageBoss(patch.tickDamage);
-    }
-  }
-
-  // ---------------------------------------------------------- enemies
-  nearestEnemy(x, y, range) {
-    let best = null, bestD = range * range;
-    const cands = this.hash.query(x, y, range, []);
-    for (const e of cands) {
-      const d = (e.x - x) ** 2 + (e.y - y) ** 2;
-      if (d < bestD) { bestD = d; best = e; }
-    }
-    if (this.boss && !this.boss.dead) {
-      const d = (this.boss.x - x) ** 2 + (this.boss.y - y) ** 2;
-      if (d < bestD && d <= range * range) { best = this.boss; }
-    }
-    return best;
-  }
-
-  enemyAt(x, y, r) {
-    const cands = this.hash.query(x, y, r, []);
-    for (const e of cands) {
-      const dx = e.x - x, dy = e.y - y;
-      if (dx * dx + dy * dy < (r + e.radius) * (r + e.radius) * 0.6) return e;
-    }
-    if (this.boss && !this.boss.dead) {
-      const dx = this.boss.x - x, dy = this.boss.y - y;
-      if (dx * dx + dy * dy < (r + this.boss.radius) ** 2 * 0.7) return this.boss;
-    }
-    return null;
-  }
-
-  damageEnemy(e, amount, color) {
-    if (e.dead) return;
-    // The boss shares the enemyAt hit path (bolt), but its hurt() returns
-    // phase strings ('phase2' is truthy) — routing it through killEnemy
-    // would crash on e.def and skip the victory. It has its own handler.
-    if (e === this.boss) { this.damageBoss(amount); return; }
-    const died = e.hurt(amount);
-    this.dmgNums.add(e.x, e.y - 14, amount, color);
-    if (died) this.killEnemy(e);
-  }
-
-  damageBoss(amount) {
-    if (!this.boss || this.boss.dead) return;
-    const res = this.boss.hurt(amount);
-    this.dmgNums.add(this.boss.x, this.boss.y - 30, amount, '#FFD76A', 26);
-    if (res === 'phase2' || res === 'phase3') {
-      this.boss.state = 'roar'; this.boss.stateT = BOSS.roarTime;
-      this.sfx.bossRoar();
-    }
-    if (res === 'dead') this.killBoss();
-  }
-
-  killEnemy(e) {
-    this.kills++;
-    this.score += SCORE.enemy;
-    // Per-type death burst (Astra §7, visual only). Count is
-    // FEEL.deathParticles (8) for every type — the design's 7/9 would shift
-    // the run-RNG stream and flip v1's verified seeds; the 1-particle
-    // difference is invisible in play.
-    const spec = {
-      puffcap: { colors: ['#E66B9A', '#E66B9A', '#E66B9A', '#E66B9A', '#FFB3C7', '#FFB3C7', '#B7E36B', '#B7E36B'], life: 0.42, dist: [12, 26] },
-      tinket: { colors: ['#B77A3E', '#F2C267', '#65D5D5', '#E7B35A', '#B77A3E', '#F2C267', '#65D5D5', '#E7B35A'], life: 0.36, dist: [10, 22] },
-      brambler: { colors: ['#7C5949', '#B17A57', '#5DBB72', '#A7E68A', '#E3FF9A', '#7C5949', '#B17A57', '#5DBB72'], life: 0.48, dist: [14, 30] },
-    }[e.type] || { colors: ['#FF7FA8', '#9BD96A', '#C9973F', '#FFF3C4'], life: FEEL.particleLife, dist: [12, 26] };
-    this.particles.burstSpec(e.x, e.y, FEEL.deathParticles, spec.colors, this.rng, { life: spec.life, dist: spec.dist, gravity: 60 });
-    this.sfx.death();
-    // Loot: coins always; hearts only when the player is hurt; shards for bramblers.
-    this.loot.spawn('coin', e.x, e.y, 1, this.rng);
-    if (e.type === 'brambler') this.loot.spawn('coin', e.x + 8, e.y - 6, 1, this.rng);
-    if (this.player.hp < this.player.maxHp && this.rng.chance(e.def.heartChance)) {
-      this.loot.spawn('heart', e.x - 8, e.y + 4, 1, this.rng);
-    }
-    if (e.def.shardChance && this.rng.chance(e.def.shardChance)) {
-      this.loot.spawn('shard', e.x + 4, e.y + 8, 1, this.rng);
-    }
-    this.enemies.splice(this.enemies.indexOf(e), 1);
-  }
-
-  killBoss() {
-    this.score += SCORE.boss;
-    // 24 particles (FEEL.bossDeathParticles, as in v1 — the design's 20
-    // would shift the run-RNG stream; the burst is the run's last roll
-    // consumer, but the loot spawns after it still roll).
-    this.particles.burstSpec(this.boss.x, this.boss.y, FEEL.bossDeathParticles, ['#76DDE0', '#FFD76A', '#FFF3C4', '#B9A9F0', '#45C6C4'], this.rng, { life: 0.72, dist: [28, 80], gravity: 40 });
-    // Expanding death ring (80px, 600ms) — must not hide the boss HP bar.
-    this.rings.push({ x: this.boss.x, y: this.boss.y, t: 0, dur: 0.6, maxR: 80, color: '178,255,255' });
-    this.shake(FEEL.shakeBossDie[0], FEEL.shakeBossDie[1]);
-    // Boss loot: 30 coins, 3 shards, one big heart (+30 HP).
-    for (let i = 0; i < 10; i++) this.loot.spawn('coin', this.boss.x + this.rng.range(-30, 30), this.boss.y + this.rng.range(-30, 30), 3, this.rng);
-    for (let i = 0; i < 3; i++) this.loot.spawn('shard', this.boss.x + this.rng.range(-24, 24), this.boss.y + this.rng.range(-24, 24), 1, this.rng);
-    this.loot.spawn('bigheart', this.boss.x, this.boss.y - 20, 1, this.rng);
+    this.kills = 0;
+    this.hitstop = 0;
+    this.shakeT = 0; this.shakeMax = 1; this.shakeAmp = 0;
+    this.lowHpWarnT = 0;
+    this.enemies = [];
+    this.projectiles = [];
+    this.loot = [];
+    this.particles = [];
+    this.damageNumbers = [];
+    this.embers = [];
+    this.telegraphs = [];
+    this.streaks = [];
+    this.slash = null;
     this.boss = null;
-    this.victoryT = 2;
+    this.offers = [];
+    this.player = null;
+    this.dungeon = null;
+    this.area = 0;
+    this.done = null; // set once on victory/defeat {result, score, ...}
+    this.shotReady = false;
+    this.shotSeedTries = 0;
+    this.bot = { path: [], pathI: 0, repathT: 0, orbitDir: 1, orbitT: 0, target: null, stuckT: 0, lastX: 0, lastY: 0, wanderT: 0, wanderX: 0, wanderY: 0 };
+    this.hash = new SpatialHash(64);
+    this.chestCoins = new Map();
+    this.minimapTick = 0;
+    this.buildRun();
   }
 
-  updateEnemies(dt) {
-    // Rebuild the spatial hash every step (cheap at <=80 enemies).
-    this.hash.clear();
-    for (const e of this.enemies) this.hash.insert(e);
-    const p = this.player;
-    for (const e of [...this.enemies]) {
-      if (e.flash > 0) e.flash -= dt;
-      if (e.thornT > 0) e.thornT -= dt;
-      if (e.cooldown > 0) e.cooldown -= dt;
-      // Knockback decay.
-      e.x += e.kbx * dt; e.y += e.kby * dt;
-      e.kbx *= 0.86; e.kby *= 0.86;
-      const dx = p.x - e.x, dy = p.y - e.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      const def = e.def;
-      // Follow a BFS path to the player (re-pathed every second); direct
-      // line movement gets stuck on walls in a room-and-corridor dungeon.
-      const stepToward = (sp) => {
-        e.repathT -= dt;
-        if (!e.path || e.repathT <= 0) {
-          e.path = this.dungeon.findPath(e.x, e.y, p.x, p.y) || [];
-          e.pathIdx = 0;
-          e.repathT = 1;
-        }
-        let tx = p.x, ty = p.y;
-        if (e.pathIdx < e.path.length) {
-          const node = e.path[e.pathIdx];
-          if (Math.hypot(node.x - e.x, node.y - e.y) < 10) e.pathIdx++;
-          if (e.pathIdx < e.path.length) { tx = e.path[e.pathIdx].x; ty = e.path[e.pathIdx].y; }
-        }
-        const mx = tx - e.x, my = ty - e.y;
-        const md = Math.hypot(mx, my) || 1;
-        const nx = e.x + (mx / md) * sp * dt;
-        if (!this.dungeon.hitsWall(nx, e.y, e.moveRadius)) e.x = nx;
-        const ny = e.y + (my / md) * sp * dt;
-        if (!this.dungeon.hitsWall(e.x, ny, e.moveRadius)) e.y = ny;
-      };
-      if (e.type === 'puffcap') {
-        if (e.state === 'chase') {
-          stepToward(e.speed);
-          if (dist <= def.attackRange && e.cooldown <= 0) { e.state = 'pause'; e.stateT = def.pause; }
-        } else if (e.state === 'pause') {
-          e.stateT -= dt;
-          if (e.stateT <= 0) { e.state = 'hop'; e.stateT = def.hopTime; e.hopFrom = { x: e.x, y: e.y }; }
-        } else if (e.state === 'hop') {
-          e.stateT -= dt;
-          const t = 1 - Math.max(0, e.stateT / def.hopTime);
-          const hx = e.hopFrom.x + (dx / dist) * def.hopDist * t;
-          const hy = e.hopFrom.y + (dy / dist) * def.hopDist * t;
-          if (!this.dungeon.hitsWall(hx, hy, e.moveRadius)) { e.x = hx; e.y = hy; }
-          if (dist <= e.radius + p.radius + 4 && p.alive) this.hurtPlayer(def.damage);
-          if (e.stateT <= 0) { e.state = 'chase'; e.cooldown = def.cooldown; }
-        }
-      } else if (e.type === 'tinket') {
-        if (e.state === 'chase') {
-          if (dist > def.attackRange) stepToward(e.speed);
-          else if (e.cooldown <= 0) { e.state = 'aim'; e.stateT = def.aimTime; e.aimAngle = Math.atan2(dy, dx); }
-        } else if (e.state === 'aim') {
-          e.stateT -= dt;
-          e.aimAngle = Math.atan2(dy, dx);
-          if (e.stateT <= 0) {
-            this.projectiles.spawn(e.x, e.y, Math.cos(e.aimAngle) * def.boltSpeed, Math.sin(e.aimAngle) * def.boltSpeed, def.damage, 'enemy', 4, 3);
-            e.state = 'chase'; e.cooldown = def.cooldown;
-          }
-        }
-      } else if (e.type === 'brambler') {
-        if (e.state === 'chase') {
-          stepToward(e.speed);
-          if (dist <= def.attackRange && e.cooldown <= 0) { e.state = 'root'; e.stateT = def.rootTime; }
-        } else if (e.state === 'root') {
-          e.stateT -= dt;
-          if (e.stateT <= 0) {
-            if (dist <= def.slamRadius && p.alive) this.hurtPlayer(def.damage);
-            this.shake(FEEL.shakeSlam[0], FEEL.shakeSlam[1]);
-            this.particles.burst(e.x, e.y, 6, ['#FF8A2A', '#8A5A33'], this.rng, 90);
-            e.state = 'chase'; e.cooldown = def.cooldown;
-          }
-        }
-      }
+  // ---- run setup ----
+  buildRun() {
+    freshIds();
+    resetStagger();
+    this.rng = makeRng(this.seed);
+    this.vrng = makeRng((this.seed ^ 0x51ab3f) >>> 0);
+    this.dungeon = generateDungeon(this.seed);
+    this.world.setDungeon(this.dungeon);
+    const start = this.dungeon.startRoom;
+    const sx = (start.x + Math.floor(start.w / 2)) * TILE + TILE / 2;
+    const sy = (start.y + Math.floor(start.h / 2)) * TILE + TILE / 2;
+    this.player = createPlayer(sx, sy);
+    this.area = 0;
+    this.enemies = [];
+    this.projectiles = [];
+    this.loot = [];
+    this.particles = [];
+    this.damageNumbers = [];
+    this.embers = [];
+    this.telegraphs = [];
+    this.streaks = [];
+    this.slash = null;
+    this.boss = null;
+    this.score = 0; this.coins = 0; this.shards = 0; this.kills = 0;
+    this.wave = 0; this.time = 0;
+    this.done = null;
+    this.chestCoins = new Map();
+    for (const c of this.dungeon.chests) {
+      this.chestCoins.set(c, this.rng.int(LOOT.chestCoinsMin, LOOT.chestCoinsMax));
     }
-    // Enemy bolts hitting the player.
-    for (let i = this.projectiles.list.length - 1; i >= 0; i--) {
-      const pr = this.projectiles.list[i];
-      if (pr.from === 'player') continue;
-      const dx = pr.x - p.x, dy = pr.y - p.y;
-      if (dx * dx + dy * dy < (pr.radius + p.radius) ** 2) {
-        this.projectiles.list.splice(i, 1);
-        this.hurtPlayer(pr.damage);
-      }
-    }
-    // Boss contact damage.
-    if (this.boss && !this.boss.dead) {
-      const dx = this.boss.x - p.x, dy = this.boss.y - p.y;
-      if (dx * dx + dy * dy < (this.boss.radius + p.radius) ** 2) this.hurtPlayer(BOSS.contactDamage);
-    }
+    // Roll the intermission offers for wave 1's intermission up front? No:
+    // offers are rolled when an intermission starts, in run order.
+    this.updateHUD();
   }
 
-  hurtPlayer(amount) {
-    const dealt = this.player.hurt(amount);
-    if (dealt > 0) {
-      this.shake(FEEL.shakeHit[0], FEEL.shakeHit[1]);
-      this.sfx.hit();
-      this.dmgNums.add(this.player.x, this.player.y - 22, amount, '#FF6B5E', 20);
-    }
+  startRun() {
+    this.buildRun();
+    this.state = 'playing';
+    this.startWave(1);
+    this.audio.unlock();
   }
 
-  // ---------------------------------------------------------- boss
-  updateBoss(dt) {
-    const b = this.boss;
-    if (!b || b.dead) return;
-    if (b.flash > 0) b.flash -= dt;
-    b.x += b.kbx * dt; b.y += b.kby * dt;
-    b.kbx *= 0.86; b.kby *= 0.86;
-    const p = this.player;
-    const dx = p.x - b.x, dy = p.y - b.y;
-    const dist = Math.hypot(dx, dy) || 1;
-    const tm = b.timeMul;
-    if (b.state === 'enter') {
-      b.stateT -= dt;
-      if (b.stateT <= 0) { b.state = 'reposition'; b.stateT = 1.2; }
-    } else if (b.state === 'roar') {
-      b.stateT -= dt;
-      if (b.stateT <= 0) { b.state = 'reposition'; b.stateT = 0.5; }
-    } else if (b.state === 'reposition') {
-      b.stateT -= dt;
-      const sp = BOSS.speed * b.speedMul;
-      // Path-follow toward the player (walls block direct lines).
-      b.repathT = (b.repathT ?? 0) - dt;
-      if (!b.path || b.repathT <= 0) {
-        b.path = this.dungeon.findPath(b.x, b.y, p.x, p.y) || [];
-        b.pathIdx = 0;
-        b.repathT = 1;
-      }
-      let tx = p.x, ty = p.y;
-      if (b.path && b.pathIdx < b.path.length) {
-        const node = b.path[b.pathIdx];
-        if (Math.hypot(node.x - b.x, node.y - b.y) < 12) b.pathIdx++;
-        if (b.pathIdx < b.path.length) { tx = b.path[b.pathIdx].x; ty = b.path[b.pathIdx].y; }
-      }
-      const mx = tx - b.x, my = ty - b.y;
-      const md = Math.hypot(mx, my) || 1;
-      const nx = b.x + (mx / md) * sp * dt;
-      if (!this.dungeon.hitsWall(nx, b.y, b.moveRadius)) b.x = nx;
-      const ny = b.y + (my / md) * sp * dt;
-      if (!this.dungeon.hitsWall(b.x, ny, b.moveRadius)) b.y = ny;
-      if (b.stateT <= 0) {
-        b.state = 'telegraph';
-        const kind = ['ring', 'fan', 'drop'][b.attackIdx % 3];
-        b.telegraph = { kind, x: p.x, y: p.y, angle: Math.atan2(dy, dx), t: 0, dur: kind === 'ring' ? BOSS.ringTime : kind === 'fan' ? BOSS.fanTime : BOSS.dropTime };
-        b.stateT = b.telegraph.dur * tm;
-      }
-    } else if (b.state === 'telegraph') {
-      b.stateT -= dt;
-      if (b.telegraph) b.telegraph.t += dt;
-      if (b.stateT <= 0) {
-        const kind = b.telegraph.kind;
-        if (kind === 'ring') {
-          if (Math.hypot(p.x - b.x, p.y - b.y) <= BOSS.ringRadius && p.alive) this.hurtPlayer(BOSS.ringDamage);
-          this.particles.burst(b.x, b.y, 16, ['#76DDE0', '#FFD76A'], this.rng, 220);
-        } else if (kind === 'fan') {
-          const base = b.telegraph.angle;
-          for (let i = -2; i <= 2; i++) {
-            const a = base + (i * BOSS.fanSpread * Math.PI) / 180;
-            this.projectiles.spawn(b.x, b.y, Math.cos(a) * BOSS.fanSpeed, Math.sin(a) * BOSS.fanSpeed, BOSS.fanDamage, 'boss', 5, BOSS.shardLife);
-          }
-        } else if (kind === 'drop') {
-          for (const off of [-BOSS.dropOffset, 0, BOSS.dropOffset]) {
-            const mx = b.telegraph.x + off, my = b.telegraph.y;
-            if (Math.hypot(p.x - mx, p.y - my) <= BOSS.dropRadius && p.alive) this.hurtPlayer(BOSS.dropDamage);
-            this.particles.burst(mx, my, 8, ['#B9A9F0', '#76DDE0'], this.rng, 140);
-          }
-        }
-        b.attackIdx++;
-        b.telegraph = null;
-        b.state = 'recovery';
-        b.stateT = BOSS.recovery;
-      }
-    } else if (b.state === 'recovery') {
-      b.stateT -= dt;
-      if (b.stateT <= 0) { b.state = 'reposition'; b.stateT = 0.6; }
+  startWave(n) {
+    this.wave = n;
+    const def = WAVES[n - 1];
+    if (def.area !== this.area) {
+      this.area = def.area;
+      this.world.setArea(def.area);
     }
-  }
-
-  // ---------------------------------------------------------- waves
-  updateWave(dt) {
-    this.waveT -= dt;
-    const spec = WAVES[this.wave - 1];
-    // Spawn groups every 7 seconds.
-    const shouldHave = Math.min(spec.groups, Math.floor((WAVE_LEN - this.waveT) / GROUP_EVERY) + (this.wave === 8 ? 0 : 1));
-    if (this.wave === 8 && this.groupsSpawned === 0 && !this.boss) {
-      const bs = this.dungeon.bossSpawnNear(this.player.x, this.player.y);
-      this.boss = new Boss(bs.x, bs.y);
-      this.boss.state = 'enter'; this.boss.stateT = 1.0;
-      this.sfx.bossRoar();
-      this.groupsSpawned = 0; // groups start spawning at 7s
-    }
-    const targetGroups = this.wave === 8
-      ? Math.min(7, Math.floor((WAVE_LEN - this.waveT) / GROUP_EVERY))
-      : shouldHave;
-    if (this.groupsSpawned < targetGroups && this.enemies.length < MAX_ENEMIES) {
-      this.spawnGroup(spec, this.wave);
-      this.groupsSpawned++;
-    }
-    // Wave cleared: all groups spawned and no standard enemies left.
-    if (this.wave < 8 && this.groupsSpawned >= spec.groups && this.enemies.length === 0) {
-      this.clearWave();
-      return;
-    }
-    // Timer expired.
-    if (this.waveT <= 0) {
-      if (this.wave === 8) {
-        if (this.boss && !this.boss.dead) this.finishDefeat();
-        return;
-      }
-      // Survived the timer: leftovers fade out, no clear bonus.
-      for (const e of this.enemies) this.particles.burst(e.x, e.y, 4, ['#FFF3C4'], this.rng, 60);
-      this.enemies = [];
-      this.startIntermission();
-    }
-  }
-
-  spawnGroup(spec, wave) {
-    const mix = this.spawnMix(wave, spec.perGroup);
-    for (const [type, count] of Object.entries(mix)) {
-      for (let i = 0; i < count; i++) {
-        if (this.enemies.length >= MAX_ENEMIES) return;
-        const pt = this.dungeon.spawnPoint(areaOfWave(wave), this.player.x, this.player.y, MIN_SPAWN_DIST);
-        this.enemies.push(new Enemy(type, pt.x + this.rng.range(-20, 20), pt.y + this.rng.range(-20, 20), spec.hpMul, spec.speedMul));
-      }
-    }
-  }
-
-  spawnMix(wave, perGroup) {
-    let tinkets = 0, bramblers = 0;
-    if (wave >= 2) tinkets = Math.min(2, Math.floor(perGroup / 2));
-    if (wave >= 3) bramblers = wave >= 5 ? Math.min(2, Math.floor(perGroup / 3)) : 1;
-    return { puffcap: Math.max(1, perGroup - tinkets - bramblers), tinket: tinkets, brambler: bramblers };
-  }
-
-  clearWave() {
-    const bonus = Math.max(0, Math.floor(this.waveT)) * LOOT.waveClearCoinPerSec;
-    this.coins += bonus;
-    this.score += Math.max(0, Math.floor(this.waveT)) * SCORE.waveClearPerSec;
-    if (LOOT.waveClearShards[this.wave]) this.shards += LOOT.waveClearShards[this.wave];
-    this.startIntermission();
+    this.waveT = WAVE_TIME;
+    this.groupsSpawned = 0;
+    this.spawnT = 0;
+    if (def.boss) this.spawnBoss();
+    this.updateHUD();
   }
 
   startIntermission() {
-    this.projectiles.clear();
-    this.embers.clear();
-    this.interT = INTERMISSION_LEN;
-    this.interBotT = 0.5;
-    this.offers = this.rollOffers();
-    this.renderOffers();
-    this.setState('intermission');
+    this.state = 'intermission';
+    this.interT = INTERMISSION_TIME;
+    this.rollOffers();
+    this.updateHUD();
+    this.showIntermission();
   }
 
   rollOffers() {
     const p = this.player;
-    const eligible = [];
-    for (const u of [
-      { id: 'wick', cost: { coins: 12 }, max: 2, owned: p.up.wick },
-      { id: 'hands', cost: { coins: 10 }, max: 2, owned: p.up.hands },
-      { id: 'thread', cost: { coins: 10 }, max: 2, owned: p.up.thread },
-      { id: 'cape', cost: { coins: 14 }, max: 2, owned: p.up.cape },
-      { id: 'charm', cost: { shards: 2 }, max: 1, owned: p.up.charm },
-    ]) {
-      if (u.owned >= u.max) continue;
-      const afford = (u.cost.coins ?? 0) <= this.coins && (u.cost.shards ?? 0) <= this.shards;
-      if (afford) eligible.push(u);
-    }
+    const eligible = UPGRADES.filter((u) => {
+      if (p.upgrades[u.id] >= u.max) return false;
+      return u.cur === 'coin' ? this.coins >= u.cost : this.shards >= u.cost;
+    });
     this.rng.shuffle(eligible);
-    return eligible.slice(0, 3);
-  }
-
-  renderOffers() {
-    const box = $('offers');
-    box.innerHTML = '';
-    const defs = {
-      wick: { name: 'Bright Wick', desc: 'Lantern Bolt +3 damage', icon: '🔥' },
-      hands: { name: 'Quick Hands', desc: 'Lantern Bolt fires 0.08s faster', icon: '⚡' },
-      thread: { name: 'Long Thread', desc: 'Lantern Bolt +35 range', icon: '⭐' },
-      cape: { name: 'Padded Cape', desc: '+20 max HP, heal 20 HP', icon: '🛡️' },
-      charm: { name: 'Shard Charm', desc: 'Skills +damage: Cut +10, Ember +3/tick, Starfall +15', icon: '💎' },
-    };
-    for (const o of this.offers) {
-      const d = defs[o.id];
-      const card = document.createElement('button');
-      card.className = 'offer';
-      card.innerHTML = `<div class="offerIcon">${d.icon}</div><div class="offerName">${d.name}</div><div class="offerDesc">${d.desc}</div><div class="offerCost">${o.cost.coins ? '🪙 ' + o.cost.coins : '💠 ' + o.cost.shards}</div>`;
-      card.addEventListener('click', () => this.endIntermission(o.id));
-      box.appendChild(card);
-    }
-    if (!this.offers.length) {
-      const none = document.createElement('div');
-      none.className = 'offerNone';
-      none.textContent = 'No upgrades affordable — save your coins for the next wave!';
-      box.appendChild(none);
-    }
-  }
-
-  endIntermission(choice) {
-    if (this.state !== 'intermission') return;
-    let id = choice;
-    if (id === 'auto') {
-      id = this.offers.length ? this.offers[0].id : null;
-    }
-    if (id) this.buyUpgrade(id);
-    this.wave++;
-    if (this.wave > 8) { this.finishVictory(); return; }
-    const newArea = areaOfWave(this.wave);
-    if (newArea !== this.area) {
-      this.area = newArea;
-      this.layer = bakeLayer(this.dungeon, newArea);
-      this.ambient.setArea(newArea);
-      this.vignette = makeVignette(newArea === 2 ? 0.03 : 0.04);
-      this.interState = this.initInteractive();
-    }
-    this.waveT = WAVE_LEN;
-    this.groupsSpawned = 0;
-    this.setState('playing');
+    this.offers = eligible.slice(0, 3);
   }
 
   buyUpgrade(id) {
+    const u = UPGRADES.find((o) => o.id === id);
+    if (!u || !this.offers.includes(u)) return false;
     const p = this.player;
-    const costs = {
-      wick: { coins: 12 }, hands: { coins: 10 }, thread: { coins: 10 },
-      cape: { coins: 14 }, charm: { shards: 2 },
-    };
-    const c = costs[id];
-    if (!c) return;
-    if ((c.coins ?? 0) > this.coins || (c.shards ?? 0) > this.shards) return;
-    this.coins -= c.coins ?? 0;
-    this.shards -= c.shards ?? 0;
-    if (id === 'wick') p.up.wick++;
-    if (id === 'hands') p.up.hands++;
-    if (id === 'thread') p.up.thread++;
-    if (id === 'cape') { p.up.cape++; p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); }
-    if (id === 'charm') p.up.charm = 1;
-    this.sfx.upgrade();
+    if (u.cur === 'coin') {
+      if (this.coins < u.cost) return false;
+      this.coins -= u.cost;
+    } else {
+      if (this.shards < u.cost) return false;
+      this.shards -= u.cost;
+    }
+    p.upgrades[u.id]++;
+    if (u.id === 'wick') p.boltDamage += 3;
+    if (u.id === 'hands') p.boltInterval = Math.max(0.2, p.boltInterval - 0.08);
+    if (u.id === 'thread') p.boltRange += 35;
+    if (u.id === 'cape') { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); }
+    if (u.id === 'charm') { p.charmCrescent = (p.charmCrescent || 0) + 10; p.charmEmber = (p.charmEmber || 0) + 3; p.charmStar = (p.charmStar || 0) + 15; }
+    this.offers = this.offers.filter((o) => o.id !== id);
+    this.audio.play('skill');
+    this.updateHUD();
+    return true;
   }
 
-  collectLoot(l) {
-    // v3: a floating pickup number, like the reference images (gold +2,
-    // blue +25, green heal) — visual only, no RNG, no gameplay change.
-    if (l.type === 'coin') { this.coins += l.value; this.score += SCORE.coin * l.value; this.sfx.coin(); this.dmgNums.addText(this.player.x, this.player.y - 26, `+${SCORE.coin * l.value}`, '#FFD76A', 20); }
-    else if (l.type === 'shard') { this.shards += l.value; this.score += SCORE.shard * l.value; this.sfx.coin(); this.dmgNums.addText(this.player.x, this.player.y - 26, `+${SCORE.shard * l.value}`, '#4ADDE0', 20); }
-    else if (l.type === 'heart') { this.player.heal(LOOT.heartHeal); this.sfx.heart(); this.dmgNums.addText(this.player.x, this.player.y - 26, `+${LOOT.heartHeal}`, '#7FE08A', 20); }
-    else if (l.type === 'bigheart') { this.player.heal(BOSS.lootHeart); this.sfx.heart(); this.dmgNums.addText(this.player.x, this.player.y - 26, `+${BOSS.lootHeart}`, '#7FE08A', 24); }
+  // ---- spawning ----
+  spawnGroup() {
+    const def = WAVES[this.wave - 1];
+    if (this.enemies.length >= MAX_ENEMIES) return;
+    const n = def.perGroup;
+    const types = [];
+    for (let i = 0; i < n; i++) types.push('puffcap');
+    // Composition rolls: tinkets from wave 2 (cap 2/group), bramblers
+    // from wave 3 (cap 1 early, 2 from wave 5).
+    const tinketCap = this.wave >= 2 ? 2 : 0;
+    const bramCap = this.wave >= 3 ? (this.wave >= 5 ? 2 : 1) : 0;
+    let tinkets = 0, brams = 0;
+    for (let i = 0; i < n; i++) {
+      const r = this.rng.f();
+      if (tinkets < tinketCap && r < 0.28) { types[i] = 'tinket'; tinkets++; }
+      else if (brams < bramCap && r >= 0.28 && r < 0.45) { types[i] = 'brambler'; brams++; }
+    }
+    const base = spawnPoint(this.dungeon, this.rng, this.player.x, this.player.y, def.area, SPAWN_MIN_DIST);
+    for (const type of types) {
+      if (this.enemies.length >= MAX_ENEMIES) break;
+      let x = base.x + this.rng.range(-30, 30);
+      let y = base.y + this.rng.range(-30, 30);
+      if (!circleFits(this.dungeon, x, y, ENEMIES[type].moveRadius)) { x = base.x; y = base.y; }
+      this.enemies.push(createEnemy(type, x, y, def.hpMul, def.spMul));
+    }
   }
 
-  // ---------------------------------------------------------- endings
-  finishVictory() {
-    if (this.state === 'victory') return;
-    this.score += SCORE.victory;
-    this.saveBest();
-    $('resultTitle').textContent = '✨ VICTORY ✨';
-    $('resultTitle').style.color = '#FFD76A';
-    $('resultScore').textContent = `Score: ${this.score}`;
-    $('resultBest').textContent = `Best: ${this.bestScore} · Wave ${this.wave} / 8`;
-    $('resultWave').textContent = `You defeated the Gloam Bell and relit the dungeon!`;
-    this.setState('victory');
-    this.sfx.victory();
-    if (this.botMode) this.done = { result: 'victory', score: this.score, wave: this.wave, time: this.time, summary: this.summary() };
-  }
-
-  finishDefeat() {
-    if (this.state === 'defeat') return;
-    this.score += SCORE.defeatPerWave * (this.wave - 1);
-    this.saveBest();
-    $('resultTitle').textContent = '💀 DEFEAT';
-    $('resultTitle').style.color = '#FF6B5E';
-    $('resultScore').textContent = `Score: ${this.score}`;
-    $('resultBest').textContent = `Best: ${this.bestScore} · Wave ${this.wave} / 8`;
-    $('resultWave').textContent = `The dungeon kept its light... this time. Wave ${this.wave} of 8.`;
-    this.setState('defeat');
-    this.sfx.defeat();
-    if (this.botMode) this.done = { result: 'defeat', score: this.score, wave: this.wave, time: this.time, summary: this.summary() };
-  }
-
-  saveBest() {
-    const best = JSON.parse(localStorage.getItem('mosslight-best') || '{"score":0,"wave":0,"coins":0}');
-    best.score = Math.max(best.score, this.score);
-    best.wave = Math.max(best.wave, this.wave);
-    best.coins += this.coins;
-    localStorage.setItem('mosslight-best', JSON.stringify(best));
-    this.bestScore = best.score;
-  }
-
-  shake(mag, dur) { this.shakeMag = mag; this.shakeT = dur; }
-
-  // ---------------------------------------------------------- determinism
-  summary() {
-    const es = this.enemies.map((e) => [e.type, Math.round(e.x), Math.round(e.y), e.hp]).sort();
-    let h = 0;
-    for (const s of JSON.stringify(es)) h = (Math.imul(h, 31) + s.charCodeAt(0)) | 0;
-    return {
-      seed: this.seed, dungeon: this.dungeon.summary(),
-      wave: this.wave, score: this.score, kills: this.kills,
-      coins: this.coins, shards: this.shards,
-      hp: this.player.hp, px: Math.round(this.player.x), py: Math.round(this.player.y),
-      enemies: h >>> 0,
-    };
-  }
-
-  // ---------------------------------------------------------- bot (autotest + shots)
-  botThink() {
+  spawnBoss() {
+    // As-built: the boss spawns ~200px along the BFS path from the player
+    // toward the boss room, so the fight starts immediately.
     const p = this.player;
-    this.botSkills = this.botSkills || [];
-    const target = this.nearestEnemy(p.x, p.y, 400);
-    const boss = this.boss && !this.boss.dead ? this.boss : null;
-    // Stuck detection: wander if barely moved for 1.5s.
-    if (Math.hypot(p.x - this.bot.lastX, p.y - this.bot.lastY) < 2) this.bot.stuckT += STEP;
-    else { this.bot.stuckT = 0; this.bot.lastX = p.x; this.bot.lastY = p.y; }
-    if (this.bot.wanderT > 0) {
-      this.bot.wanderT -= STEP;
-      this.botMove = { x: this.bot.wanderX, y: this.bot.wanderY };
-      return;
-    }
-    if (this.bot.stuckT > 1.5) {
-      const a = this.rng.float() * Math.PI * 2;
-      this.bot.wanderX = Math.cos(a); this.bot.wanderY = Math.sin(a);
-      this.bot.wanderT = 0.7;
-      this.bot.stuckT = 0;
-      return;
-    }
-    // A hurt player runs for the nearest heart first.
-    if (p.hp < p.maxHp * 0.7) {
-      let heart = null, hd = 160;
-      for (const l of this.loot.list) {
-        if (l.type !== 'heart' && l.type !== 'bigheart') continue;
-        const d = Math.hypot(l.x - p.x, l.y - p.y);
-        if (d < hd) { heart = l; hd = d; }
-      }
-      if (heart) {
-        const dx = heart.x - p.x, dy = heart.y - p.y, d = Math.hypot(dx, dy) || 1;
-        this.botMove = { x: dx / d, y: dy / d };
-        return;
+    const br = this.dungeon.bossRoom;
+    const bx = (br.x + Math.floor(br.w / 2)) * TILE + TILE / 2;
+    const by = (br.y + Math.floor(br.h / 2)) * TILE + TILE / 2;
+    const path = findPath(this.dungeon, p.x, p.y, bx, by);
+    let x = bx, y = by;
+    if (path.length > 2) {
+      let walked = 0;
+      for (let i = 1; i < path.length; i++) {
+        const seg = dist(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y);
+        if (walked + seg >= BOSS.spawnDist) {
+          const k = (BOSS.spawnDist - walked) / seg;
+          x = path[i - 1].x + (path[i].x - path[i - 1].x) * k;
+          y = path[i - 1].y + (path[i].y - path[i - 1].y) * k;
+          break;
+        }
+        walked += seg;
       }
     }
-    // Boss fight: hold 150-160px (outside the 140px ring, inside the
-    // 190px bolt range and the 160px Ember aim); close in to 100-135px
-    // only when Starfall is ready and affordable, and run out / strafe
-    // while the boss telegraphs an attack.
-    if (boss) {
-      const dx = boss.x - p.x, dy = boss.y - p.y;
-      const d = Math.hypot(dx, dy) || 1;
-      const ux = dx / d, uy = dy / d;
-      const starCdReady = p.cooldowns.starfall <= 0; // cooldown ready (energy may still be short)
-      // Hold range: 150-160px normally (inside the 190px bolt range and
-      // the 160px Ember aim, and close enough to escape the 180px ring in
-      // the 0.7s telegraph); 100-135px when Starfall is ready and affordable.
-      const wantClose = starCdReady && p.energy >= 100;
-      const holdLo = wantClose ? 100 : 150;
-      const holdHi = wantClose ? 135 : 160;
-      if (boss.telegraph?.kind === 'ring') {
-        this.botMove = { x: -ux, y: -uy }; // run out of the ring
-      } else if (boss.telegraph?.kind === 'drop') {
-        this.botMove = { x: -uy, y: ux }; // strafe out of the markers
-      } else if (boss.telegraph?.kind === 'fan') {
-        this.botMove = { x: -uy, y: ux }; // strafe out of the fan
-      } else if (d > holdHi || !this.dungeon.hasLineOfSight(p.x, p.y, boss.x, boss.y)) {
-        // Close in: to 150-160px normally (inside bolt/Ember range), to
-        // 100-135px when Starfall is ready and affordable — and always
-        // keep closing while a wall blocks the bolt's line of sight.
-        // BFS path: a direct line crosses walls and wedges the bot.
-        this.botRepathT = (this.botRepathT ?? 0) - STEP;
-        if (!this.botPath || this.botRepathT <= 0) {
-          this.botPath = this.dungeon.findPath(p.x, p.y, boss.x, boss.y) || [];
-          this.botPathIdx = 0;
-          this.botRepathT = 1;
+    this.boss = createBoss(x, y);
+    this.audio.play('roar');
+  }
+
+  // ---- one fixed step ----
+  step(dt) {
+    this.time += dt;
+    if (this.hitstop > 0) { this.hitstop--; return; }
+    if (this.state === 'playing') this.updatePlaying(dt);
+    else if (this.state === 'intermission') this.updateIntermission(dt);
+    // Visual-only updates run in every state (particles, numbers).
+    updateParticles(this.particles, dt);
+    updateDamageNumbers(this.damageNumbers, dt);
+    if (this.shakeT > 0) this.shakeT -= dt;
+    // Low-HP warning tick.
+    if (this.player && this.player.hp <= FEEL.lowHp && this.player.hp > 0) {
+      this.lowHpWarnT -= dt;
+      if (this.lowHpWarnT <= 0) { this.lowHpWarnT = FEEL.lowHpWarnEvery; this.audio.play('warn'); }
+    }
+  }
+
+  updateIntermission(dt) {
+    this.interT -= dt;
+    const p = this.player;
+    // Standing near a statue channels it (1.2s) — also works in intermission.
+    this.updateStatues(dt);
+    if (this.opts.autotest || this.opts.shot) this.botIntermission();
+    if (this.interT <= 0) {
+      // Timeout: auto-buy the first affordable offer, else continue bare.
+      const first = this.offers[0];
+      if (first) this.buyUpgrade(first.id);
+      this.hideIntermission();
+      this.state = 'playing';
+      this.startWave(this.wave + 1);
+    }
+  }
+
+  updatePlaying(dt) {
+    const p = this.player;
+    if (p.dead) return;
+    // --- timers ---
+    this.waveT -= dt;
+    p.iframesT = Math.max(0, p.iframesT - dt);
+    p.castT = Math.max(0, p.castT - dt);
+    p.hurtT = Math.max(0, p.hurtT - dt);
+    for (const k of Object.keys(p.cooldowns)) p.cooldowns[k] = Math.max(0, p.cooldowns[k] - dt);
+    p.energy = Math.min(PLAYER.energyMax, p.energy + PLAYER.energyRegen * dt);
+    if (p.shieldT > 0) { p.shieldT -= dt; if (p.shieldT <= 0) p.shield = 0; }
+    if (p.starfallWindup > 0) {
+      p.starfallWindup -= dt;
+      if (p.starfallWindup <= 0) this.fireStarfall();
+    }
+    // --- input / bot ---
+    if (this.opts.autotest || this.opts.shot) this.botStep(dt);
+    else this.applyInput(dt);
+    // --- auto bolt ---
+    p.boltTimer -= dt;
+    if (p.boltTimer <= 0) this.tryBolt();
+    // --- spawns ---
+    const def = WAVES[this.wave - 1];
+    if (this.groupsSpawned < def.groups) {
+      this.spawnT += dt;
+      // First group: immediately on normal waves, at 7s on a boss wave
+      // (the boss itself spawns at 0s; adds arrive at 7/14/21/28s).
+      const firstAt = def.boss ? SPAWN_GROUP_EVERY : 0.01;
+      if (this.spawnT >= SPAWN_GROUP_EVERY || (this.groupsSpawned === 0 && this.spawnT >= firstAt)) {
+        this.spawnT = 0;
+        this.groupsSpawned++;
+        this.spawnGroup();
+      }
+    }
+    // --- entities ---
+    this.updateEnemies(dt);
+    this.updateBoss(dt);
+    this.updateProjectiles(dt);
+    this.updateLoot(dt);
+    this.updateEmbers(dt);
+    this.updateTelegraphs(dt);
+    this.updateStreaks(dt);
+    if (this.slash) {
+      this.slash.life -= dt;
+      if (this.slash.life <= 0) this.slash = null;
+    }
+    this.updateChests(dt);
+    this.updateStatues(dt);
+    // --- wave end ---
+    if (this.wave < WAVE_COUNT) {
+      const allSpawned = this.groupsSpawned >= def.groups;
+      if ((allSpawned && this.enemies.length === 0) || this.waveT <= 0) {
+        // Wave clear bonus on remaining seconds (only when cleared by kills).
+        if (allSpawned && this.enemies.length === 0 && this.waveT > 0) {
+          const bonus = Math.round(this.waveT) * LOOT.waveClearPerSecond;
+          this.coins += bonus;
+          this.score += bonus * LOOT.coinScore;
+          const shardBonus = LOOT.waveClearShards[this.wave - 1] || 0;
+          this.shards += shardBonus;
+          this.score += shardBonus * LOOT.shardScore;
         }
-        let tx = boss.x, ty = boss.y;
-        if (this.botPathIdx < this.botPath.length) {
-          const node = this.botPath[this.botPathIdx];
-          if (Math.hypot(node.x - p.x, node.y - p.y) < 10) this.botPathIdx++;
-          if (this.botPathIdx < this.botPath.length) { tx = this.botPath[this.botPathIdx].x; ty = this.botPath[this.botPathIdx].y; }
+        this.enemies = [];
+        this.projectiles = [];
+        this.startIntermission();
+      }
+    } else if (this.waveT <= 0 && !this.boss) {
+      // Wave 8 timer expired with the boss already dead: victory was set
+      // on the kill; this only fires if the boss somehow vanished.
+      this.endRun('victory');
+    } else if (this.waveT <= 0 && this.boss) {
+      this.endRun('defeat');
+    }
+    this.minimapTick++;
+    if (this.minimapTick % 6 === 0 && !this.opts.autotest) this.drawMinimap();
+    this.updateHUD();
+  }
+
+  applyInput(dt) {
+    const p = this.player;
+    const ix = window.__joy ? window.__joy.x : 0;
+    const iy = window.__joy ? window.__joy.y : 0;
+    const kx = (window.__keys?.has('KeyD') || window.__keys?.has('ArrowRight') ? 1 : 0) - (window.__keys?.has('KeyA') || window.__keys?.has('ArrowLeft') ? 1 : 0);
+    const ky = (window.__keys?.has('KeyS') || window.__keys?.has('ArrowDown') ? 1 : 0) - (window.__keys?.has('KeyW') || window.__keys?.has('ArrowUp') ? 1 : 0);
+    let mx = ix + kx, my = iy + ky;
+    const len = Math.hypot(mx, my);
+    if (len > 1) { mx /= len; my /= len; }
+    p.moving = len > 0.05;
+    if (p.moving) {
+      const moved = moveCircle(this.dungeon, p.x, p.y, p.moveRadius, mx * p.speed * dt, my * p.speed * dt);
+      p.x = moved.x; p.y = moved.y;
+      p.faceAngle = Math.atan2(my, mx);
+    }
+    // Queued skill casts (input.js sets window.__castQueue).
+    if (window.__castQueue && window.__castQueue.length) {
+      const id = window.__castQueue.shift();
+      this.castSkill(id);
+    }
+  }
+
+  // ---- combat ----
+  nearestTarget(maxRange, preferBoss = true) {
+    const p = this.player;
+    let best = null, bestD = maxRange;
+    if (this.boss && preferBoss) {
+      const d = dist(p.x, p.y, this.boss.x, this.boss.y);
+      if (d <= maxRange) { best = this.boss; bestD = d; }
+    }
+    for (const e of this.enemies) {
+      const d = dist(p.x, p.y, e.x, e.y);
+      // The bolt prefers the boss unless an add is very close (as-built).
+      if (preferBoss && best === this.boss && d > 20) continue;
+      if (d < bestD) { best = e; bestD = d; }
+    }
+    return best;
+  }
+
+  tryBolt() {
+    const p = this.player;
+    const target = this.nearestTarget(p.boltRange, true);
+    if (!target) { p.boltTimer = 0.1; return; }
+    p.boltTimer = p.boltInterval;
+    const a = Math.atan2(target.y - p.y, target.x - p.x);
+    p.faceAngle = a;
+    p.castT = 0.16;
+    this.projectiles.push(createProjectile(
+      p.x + Math.cos(a) * 14, p.y + Math.sin(a) * 14,
+      Math.cos(a) * PLAYER.boltSpeed, Math.sin(a) * PLAYER.boltSpeed,
+      p.boltDamage, 'bolt', 2,
+    ));
+    this.audio.play('bolt');
+  }
+
+  castSkill(id) {
+    const p = this.player;
+    if (this.state !== 'playing' || p.dead || p.starfallWindup > 0) return false;
+    const s = SKILLS[id];
+    if (!s) return false;
+    if (p.cooldowns[id] > 0 || p.energy < s.cost) return false;
+    p.energy -= s.cost;
+    p.cooldowns[id] = s.cd;
+    p.castT = 0.16;
+    if (id === 'crescent') {
+      const dmg = s.damage + (p.charmCrescent || 0);
+      const a = p.faceAngle;
+      this.slash = { x: p.x, y: p.y, angle: a, life: 0.22, maxLife: 0.22 };
+      let hits = 0;
+      for (const e of [...this.enemies]) {
+        if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) { this.damageEnemy(e, dmg, 'skill', '#ffd76a'); hits++; }
+      }
+      if (this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= s.range + this.boss.radius) {
+        this.damageBoss(dmg, 'skill');
+        hits++;
+      }
+      if (hits > 0) this.hitstop = FEEL.hitstopCrescent;
+      this.audio.play('skill');
+    } else if (id === 'ember') {
+      const target = this.nearestTarget(s.range, true);
+      let ax, ay;
+      if (target) { ax = target.x; ay = target.y; }
+      else { ax = p.x + Math.cos(p.faceAngle) * 100; ay = p.y + Math.sin(p.faceAngle) * 100; }
+      const patch = { id: this.embers.length + 1, x: ax, y: ay, r: s.patchRadius, life: s.tickTime, tickT: SKILLS.ember.tickEvery, tick: s.tick + (p.charmEmber || 0), damage: s.damage };
+      this.embers.push(patch);
+      for (const e of [...this.enemies]) {
+        if (dist(ax, ay, e.x, e.y) <= s.patchRadius + e.radius) this.damageEnemy(e, s.damage, 'skill', '#ff8a2a');
+      }
+      if (this.boss && dist(ax, ay, this.boss.x, this.boss.y) <= s.patchRadius + this.boss.radius) this.damageBoss(s.damage, 'skill');
+      this.audio.play('skill');
+    } else if (id === 'glassguard') {
+      p.shield = s.shield;
+      p.shieldT = s.shieldTime;
+      this.audio.play('skill');
+    } else if (id === 'starfall') {
+      p.starfallWindup = s.windup;
+      p.starfallX = p.x; p.starfallY = p.y;
+      this.audio.play('skill');
+    }
+    this.updateHUD();
+    return true;
+  }
+
+  fireStarfall() {
+    const p = this.player;
+    const s = SKILLS.starfall;
+    const dmg = s.damage + (p.charmStar || 0);
+    const cx = p.starfallX, cy = p.starfallY;
+    // Five gold streaks converge on the blast point (visual).
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2 + 0.4;
+      this.streaks.push({ x: cx + Math.cos(a) * 60, y: cy + Math.sin(a) * 60, h: 9, t: 0 });
+    }
+    let hitBoss = false;
+    for (const e of [...this.enemies]) {
+      if (dist(cx, cy, e.x, e.y) <= s.range + e.radius) {
+        this.damageEnemy(e, dmg, 'skill', '#ffd76a');
+        const a = Math.atan2(e.y - cy, e.x - cx);
+        const nx = e.x + Math.cos(a) * s.knockback, ny = e.y + Math.sin(a) * s.knockback;
+        if (circleFits(this.dungeon, nx, ny, e.moveRadius)) { e.x = nx; e.y = ny; }
+      }
+    }
+    if (this.boss && dist(cx, cy, this.boss.x, this.boss.y) <= s.range + this.boss.radius) {
+      this.damageBoss(dmg, 'skill');
+      hitBoss = true;
+    }
+    this.shake(FEEL.shakeStarfall.amp, FEEL.shakeStarfall.time);
+    if (hitBoss) this.hitstop = FEEL.hitstopStarfallBoss;
+  }
+
+  damageEnemy(e, dmg, kind, color = '#ffffff') {
+    if (e.hp <= 0) return;
+    e.hp -= dmg;
+    e.flashT = 0.1;
+    addDamageNumber(this.damageNumbers, e.x, e.y - 14, Math.round(dmg), color, kind === 'skill' ? 24 : 22);
+    burstParticles(this.particles, this.vrng, e.x, e.y, color === '#ffffff' ? '#ffd76a' : color, 3, 60);
+    if (kind === 'bolt') this.hitstop = Math.max(this.hitstop, FEEL.hitstopBolt);
+    this.audio.play('hit');
+    if (e.hp <= 0) this.killEnemy(e);
+  }
+
+  killEnemy(e) {
+    const idx = this.enemies.indexOf(e);
+    if (idx >= 0) this.enemies.splice(idx, 1);
+    this.kills++;
+    this.score += LOOT.killScore;
+    const def = ENEMIES[e.type];
+    burstParticles(this.particles, this.vrng, e.x, e.y, e.type === 'puffcap' ? '#ff7fb0' : e.type === 'tinket' ? '#d89a4a' : '#6fe08a', FEEL.deathParticles, 100);
+    for (let i = 0; i < def.coinDrop; i++) this.loot.push(createLoot('coin', e.x, e.y, this.rng));
+    if (this.player.hp < this.player.maxHp && this.rng.chance(def.heartChance)) {
+      this.loot.push(createLoot('heart', e.x, e.y, this.rng));
+    }
+    if (def.shardChance > 0 && this.rng.chance(def.shardChance)) {
+      this.loot.push(createLoot('shard', e.x, e.y, this.rng));
+    }
+    this.audio.play('death');
+  }
+
+  damageBoss(dmg, kind) {
+    const b = this.boss;
+    if (!b || b.hp <= 0) return;
+    const before = b.hp;
+    b.hp -= dmg;
+    b.flashT = 0.12;
+    addDamageNumber(this.damageNumbers, b.x, b.y - 40, Math.round(dmg), kind === 'skill' ? '#ffd76a' : '#ffffff', 26);
+    if (kind === 'bolt') this.hitstop = Math.max(this.hitstop, FEEL.hitstopBolt);
+    this.audio.play('hit');
+    if (before > b.maxHp * BOSS.phase2At && b.hp <= b.maxHp * BOSS.phase2At && b.phase === 1) {
+      b.phase = 2;
+      b.state = 'roar'; b.stateT = BOSS.roarTime;
+      this.audio.play('roar');
+    } else if (before > b.maxHp * BOSS.phase3At && b.hp <= b.maxHp * BOSS.phase3At && b.phase === 2) {
+      b.phase = 3;
+      b.state = 'roar'; b.stateT = BOSS.roarTime;
+      this.audio.play('roar');
+    }
+    if (b.hp <= 0) this.killBoss();
+  }
+
+  killBoss() {
+    const b = this.boss;
+    this.boss = null;
+    this.score += LOOT.bossScore;
+    burstParticles(this.particles, this.vrng, b.x, b.y, '#5fe0dc', FEEL.bossDeathParticles, 160);
+    burstParticles(this.particles, this.vrng, b.x, b.y, '#ffd76a', 12, 120);
+    for (let i = 0; i < BOSS.lootCoins; i++) this.loot.push(createLoot('coin', b.x, b.y, this.rng));
+    for (let i = 0; i < BOSS.lootShards; i++) this.loot.push(createLoot('shard', b.x, b.y, this.rng));
+    this.loot.push(createLoot('bigheart', b.x, b.y, this.rng));
+    this.shake(FEEL.shakeBossDeath.amp, FEEL.shakeBossDeath.time);
+    this.audio.play('victory');
+    // Collect the boss loot instantly for the score tally, then end.
+    this.score += BOSS.lootCoins * LOOT.coinScore + BOSS.lootShards * LOOT.shardScore;
+    this.coins += BOSS.lootCoins;
+    this.shards += BOSS.lootShards;
+    this.endRun('victory');
+  }
+
+  damagePlayer(dmg, source = '') {
+    const p = this.player;
+    if (p.dead || p.iframesT > 0) return;
+    let rest = dmg;
+    if (p.shield > 0) {
+      const absorbed = Math.min(p.shield, rest);
+      p.shield -= absorbed;
+      rest -= absorbed;
+    }
+    if (rest > 0) {
+      p.hp -= rest;
+      p.iframesT = PLAYER.iframes;
+      p.hurtT = 0.25;
+      this.shake(FEEL.shakePlayerHit.amp, FEEL.shakePlayerHit.time);
+      addDamageNumber(this.damageNumbers, p.x, p.y - 20, Math.round(rest), '#ff6b7a', 20);
+      this.audio.play('hurt');
+    }
+    if (p.hp <= 0) {
+      p.hp = 0;
+      p.dead = true;
+      this.audio.play('defeat');
+      this.endRun('defeat');
+    }
+    this.updateHUD();
+  }
+
+  shake(amp, time) {
+    this.shakeAmp = amp;
+    this.shakeMax = time;
+    this.shakeT = time;
+  }
+
+  // ---- enemies ----
+  updateEnemies(dt) {
+    const p = this.player;
+    // Rebuild the spatial hash for separation + targeting.
+    this.hash.clear();
+    for (const e of this.enemies) this.hash.insert(e);
+    for (const e of [...this.enemies]) {
+      e.flashT = Math.max(0, e.flashT - dt);
+      e.attackCd = Math.max(0, e.attackCd - dt);
+      e.contactCd = Math.max(0, e.contactCd - dt);
+      const d = dist(e.x, e.y, p.x, p.y);
+      e.faceAngle = Math.atan2(p.y - e.y, p.x - e.x);
+      if (e.type === 'puffcap') this.updatePuffcap(e, dt, d);
+      else if (e.type === 'tinket') this.updateTinket(e, dt, d);
+      else this.updateBrambler(e, dt, d);
+      // Contact: regular enemies deal damage through their attacks only
+      // (puffcap hop landing, tinket bolt, brambler slam) — NOT by merely
+      // touching the player (v3-faithful; every-frame contact damage made
+      // any touch a death sentence). Glassguard's shield still hurts
+      // enemies that touch the player (0.5s per enemy).
+      if (p.shield > 0 && d < e.radius + p.radius && e.contactCd <= 0) {
+        e.contactCd = SKILLS.glassguard.contactEvery;
+        this.damageEnemy(e, SKILLS.glassguard.contactDamage, 'skill', '#7fe8ff');
+      }
+    }
+    // Light separation so enemies don't stack exactly.
+    const list = this.enemies;
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j];
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dd = Math.hypot(dx, dy);
+        const min = (a.radius + b.radius) * 0.75;
+        if (dd > 0.01 && dd < min) {
+          const push = (min - dd) / 2;
+          const nx = dx / dd, ny = dy / dd;
+          const ma = moveCircle(this.dungeon, a.x - nx * push, a.y - ny * push, a.moveRadius, 0, 0);
+          const mb = moveCircle(this.dungeon, b.x + nx * push, b.y + ny * push, b.moveRadius, 0, 0);
+          a.x = ma.x; a.y = ma.y; b.x = mb.x; b.y = mb.y;
         }
-        const mx = tx - p.x, my = ty - p.y, md = Math.hypot(mx, my) || 1;
-        this.botMove = { x: mx / md, y: my / md };
-      } else if (d < holdLo) {
-        this.botMove = { x: -ux, y: -uy }; // too close: back off
+      }
+    }
+  }
+
+  followPath(e, dt, speed) {
+    if (!e.path || e.pathI >= e.path.length) return false;
+    const wp = e.path[e.pathI];
+    const dx = wp.x - e.x, dy = wp.y - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 10) { e.pathI++; return true; }
+    const stepLen = speed * dt;
+    const nx = e.x + (dx / d) * Math.min(stepLen, d);
+    const ny = e.y + (dy / d) * Math.min(stepLen, d);
+    const moved = moveCircle(this.dungeon, e.x, e.y, e.moveRadius, nx - e.x, ny - e.y);
+    e.x = moved.x; e.y = moved.y;
+    e.moving = true;
+    e.faceAngle = Math.atan2(dy, dx);
+    return true;
+  }
+
+  repath(e, tx, ty) {
+    e.path = findPath(this.dungeon, e.x, e.y, tx, ty);
+    e.pathI = 0;
+    e.repathT = 1;
+  }
+
+  updatePuffcap(e, dt, d) {
+    const p = this.player;
+    const def = ENEMIES.puffcap;
+    e.hopT = Math.max(0, (e.hopT || 0) - dt);
+    if (e.state === 'pause') {
+      e.stateT -= dt;
+      e.moving = false;
+      if (e.stateT <= 0) {
+        e.state = 'hop';
+        e.hopT = def.hopTime;
+        e.hopFromX = e.x; e.hopFromY = e.y;
+        const a = Math.atan2(p.y - e.y, p.x - e.x);
+        e.hopToX = e.x + Math.cos(a) * def.hopDist;
+        e.hopToY = e.y + Math.sin(a) * def.hopDist;
+      }
+    } else if (e.state === 'hop') {
+      const k = 1 - e.hopT / def.hopTime;
+      const nx = e.hopFromX + (e.hopToX - e.hopFromX) * k;
+      const ny = e.hopFromY + (e.hopToY - e.hopFromY) * k;
+      const moved = moveCircle(this.dungeon, e.x, e.y, e.moveRadius, nx - e.x, ny - e.y);
+      e.x = moved.x; e.y = moved.y;
+      e.moving = true;
+      if (e.hopT <= 0) {
+        e.state = 'chase';
+        e.attackCd = def.attackCd;
+        // Hop landing: the attack itself. (v3: damage when the hop lands
+        // on the player; the pause before the hop is the dodge window.)
+        if (dist(e.x, e.y, p.x, p.y) <= e.radius + p.radius + 4) {
+          this.damagePlayer(def.damage, 'puffcap');
+        }
+      }
+    } else {
+      e.moving = false;
+      if (d <= def.attackRange && e.attackCd <= 0) {
+        e.state = 'pause';
+        e.stateT = def.pauseTime;
       } else {
-        this.botMove = { x: -uy * 0.5, y: ux * 0.5 }; // orbit at hold range
+        e.repathT -= dt;
+        if (e.repathT <= 0 || !e.path || e.pathI >= e.path.length) this.repath(e, p.x, p.y);
+        this.followPath(e, dt, e.speed);
       }
-      // Save energy for Starfall while it is ready: never spend the last
-      // 100 energy on a small skill when Starfall is off cooldown.
-      if (starCdReady && p.energy >= 100 && d < 135) this.botSkills.push('starfall');
-      if (p.cooldowns.crescent <= 0 && p.energy >= 20 && d < 70 && (!starCdReady || p.energy >= 120)) this.botSkills.push('crescent');
-      if (p.cooldowns.ember <= 0 && p.energy >= 30 && d < 160 && (!starCdReady || p.energy >= 130)) this.botSkills.push('ember');
-      const closeFoes = this.enemies.filter((e) => Math.hypot(e.x - p.x, e.y - p.y) < 80).length;
-    if ((closeFoes >= 2 || p.hp < 55) && p.cooldowns.glassguard <= 0 && p.energy >= 25) this.botSkills.push('glassguard');
-      return;
     }
-    if (!target) { this.botMove = { x: 0, y: 0 }; return; }
-    const dx = target.x - p.x, dy = target.y - p.y;
-    const d = Math.hypot(dx, dy) || 1;
-    const ux = dx / d, uy = dy / d;
-    // Kite: too close -> back away; in range -> strafe; far -> follow a BFS
-    // path (a direct line to a far enemy crosses walls and gets stuck).
-    if (d < 45) this.botMove = { x: -ux, y: -uy };
-    else if (d < p.boltRange) this.botMove = { x: -uy * 0.7, y: ux * 0.7 };
-    else {
-      this.botRepathT = (this.botRepathT ?? 0) - STEP;
-      if (!this.botPath || this.botRepathT <= 0) {
-        this.botPath = this.dungeon.findPath(p.x, p.y, target.x, target.y) || [];
-        this.botPathIdx = 0;
-        this.botRepathT = 1;
-      }
-      let tx = target.x, ty = target.y;
-      if (this.botPathIdx < this.botPath.length) {
-        const node = this.botPath[this.botPathIdx];
-        if (Math.hypot(node.x - p.x, node.y - p.y) < 10) this.botPathIdx++;
-        if (this.botPathIdx < this.botPath.length) { tx = this.botPath[this.botPathIdx].x; ty = this.botPath[this.botPathIdx].y; }
-      }
-      const mx = tx - p.x, my = ty - p.y;
-      const md = Math.hypot(mx, my) || 1;
-      this.botMove = { x: mx / md, y: my / md };
-    }
-    const near = this.hash.query(p.x, p.y, 70, []);
-    if (near.length >= 2 && p.cooldowns.crescent <= 0 && p.energy >= 20) this.botSkills.push('crescent');
-    const mid = this.hash.query(p.x, p.y, 110, []);
-    if (mid.length >= 2 && p.cooldowns.ember <= 0 && p.energy >= 30) this.botSkills.push('ember');
-    const closeFoes = this.enemies.filter((e) => Math.hypot(e.x - p.x, e.y - p.y) < 80).length;
-    if ((closeFoes >= 2 || p.hp < 55) && p.cooldowns.glassguard <= 0 && p.energy >= 25) this.botSkills.push('glassguard');
-    const far = this.hash.query(p.x, p.y, 135, []);
-    if (far.length >= 5 && p.cooldowns.starfall <= 0 && p.energy >= 100) this.botSkills.push('starfall');
-    // Intermission choice is made in endIntermission by the shot driver.
   }
 
-  botChooseOffer() {
-    // Priority: cape when hurt, then wick, hands, thread, charm.
+  updateTinket(e, dt, d) {
     const p = this.player;
-    const order = ['cape', 'wick', 'hands', 'thread', 'charm'];
-    if (p.hp < 70 && this.offers.some((o) => o.id === 'cape')) return 'cape';
-    for (const id of order) if (this.offers.some((o) => o.id === id)) return id;
+    const def = ENEMIES.tinket;
+    if (e.state === 'aim') {
+      e.stateT -= dt;
+      e.moving = false;
+      // Aim is LOCKED at aim start (e.aimAngle): the aim line shows where
+      // the bolt will go, and the player dodges by leaving that line.
+      // (Tracking the player made the bolt undodgeable.)
+      this.setAimTelegraph(e);
+      if (e.stateT <= 0) {
+        e.state = 'chase';
+        e.attackCd = def.attackCd;
+        const a = e.aimAngle;
+        this.projectiles.push(createProjectile(
+          e.x + Math.cos(a) * 12, e.y + Math.sin(a) * 12,
+          Math.cos(a) * def.boltSpeed, Math.sin(a) * def.boltSpeed,
+          def.damage, 'tinket', 3,
+        ));
+        this.clearAimTelegraph(e);
+        this.audio.play('tinket');
+      }
+    } else {
+      e.moving = false;
+      if (d <= def.stopRange && e.attackCd <= 0) {
+        e.state = 'aim';
+        e.stateT = def.aimTime;
+        e.aimX = p.x; e.aimY = p.y;
+        e.aimAngle = Math.atan2(p.y - e.y, p.x - e.x);
+      } else {
+        e.repathT -= dt;
+        if (e.repathT <= 0 || !e.path || e.pathI >= e.path.length) this.repath(e, p.x, p.y);
+        this.followPath(e, dt, e.speed);
+      }
+    }
+  }
+
+  setAimTelegraph(e) {
+    let tg = this.telegraphs.find((t) => t.owner === e && t.kind === 'aim');
+    if (!tg) {
+      tg = { kind: 'aim', owner: e, x0: e.x, y0: e.y, x1: e.aimX, y1: e.aimY, life: 1, maxLife: 1, final: false, color: '#35c9d0', r: 0 };
+      this.telegraphs.push(tg);
+    }
+    tg.x0 = e.x; tg.y0 = e.y; tg.x1 = e.aimX; tg.y1 = e.aimY;
+  }
+
+  clearAimTelegraph(e) {
+    this.telegraphs = this.telegraphs.filter((t) => !(t.owner === e && t.kind === 'aim'));
+  }
+
+  updateBrambler(e, dt, d) {
+    const p = this.player;
+    const def = ENEMIES.brambler;
+    if (e.state === 'root') {
+      e.stateT -= dt;
+      e.moving = false;
+      // Ring telegraph (visual, rebuilt every step while rooting).
+      let tg = this.telegraphs.find((t) => t.owner === e && t.kind === 'ring');
+      if (!tg) {
+        tg = { kind: 'ring', owner: e, x: e.x, y: e.y, r: def.ringRadius, life: def.rootTime, maxLife: def.rootTime, final: false, color: '#e94f62' };
+        this.telegraphs.push(tg);
+      }
+      tg.x = e.x; tg.y = e.y;
+      tg.final = e.stateT <= 0.15;
+      tg.life = Math.max(0.01, e.stateT);
+      if (e.stateT <= 0) {
+        this.telegraphs = this.telegraphs.filter((t) => t !== tg);
+        e.state = 'chase';
+        e.attackCd = def.attackCd;
+        burstParticles(this.particles, this.vrng, e.x, e.y, '#e94f62', 6, 80);
+        if (dist(e.x, e.y, p.x, p.y) <= def.ringRadius + p.radius) {
+          this.damagePlayer(def.damage, 'brambler');
+        }
+        this.shake(FEEL.shakeSlam.amp, FEEL.shakeSlam.time);
+        this.audio.play('slam');
+      }
+    } else {
+      e.moving = false;
+      if (d <= def.attackRange && e.attackCd <= 0) {
+        e.state = 'root';
+        e.stateT = def.rootTime;
+      } else {
+        e.repathT -= dt;
+        if (e.repathT <= 0 || !e.path || e.pathI >= e.path.length) this.repath(e, p.x, p.y);
+        this.followPath(e, dt, e.speed);
+      }
+    }
+  }
+
+  // ---- boss ----
+  updateBoss(dt) {
+    const b = this.boss;
+    if (!b) return;
+    const p = this.player;
+    b.flashT = Math.max(0, b.flashT - dt);
+    const speedMul = b.phase === 2 ? BOSS.phase2SpeedMul : 1;
+    const moveSpeed = b.speed * (b.phase === 3 ? BOSS.phase3MoveMul : 1);
+    const d = dist(b.x, b.y, p.x, p.y);
+    b.faceAngle = Math.atan2(p.y - b.y, p.x - b.x);
+    b.telegraphing = false;
+    if (b.state === 'roar') {
+      b.stateT -= dt * speedMul;
+      b.moving = false;
+      if (b.stateT <= 0) { b.state = 'chase'; b.stateT = 1.2; }
+      return;
+    }
+    if (b.state === 'chase') {
+      b.stateT -= dt;
+      b.moving = true;
+      b.repathT -= dt;
+      if (b.repathT <= 0 || !b.path || b.pathI >= b.path.length) this.repath(b, p.x, p.y);
+      this.followPath(b, dt, moveSpeed);
+      if (d < b.radius + p.radius) this.damagePlayer(BOSS.contactDamage, 'boss');
+      if (b.stateT <= 0) this.bossStartPattern();
+      return;
+    }
+    if (b.state === 'ringTel') {
+      b.stateT -= dt * speedMul;
+      b.telegraphing = true;
+      b.moving = false;
+      let tg = this.telegraphs.find((t) => t.owner === b && t.kind === 'ring');
+      if (!tg) {
+        tg = { kind: 'ring', owner: b, x: b.x, y: b.y, r: BOSS.ringRadius, life: BOSS.ringTelegraph, maxLife: BOSS.ringTelegraph, final: false, color: '#e94f62' };
+        this.telegraphs.push(tg);
+      }
+      tg.x = b.x; tg.y = b.y;
+      tg.final = b.stateT <= 0.15;
+      tg.life = Math.max(0.01, b.stateT);
+      if (b.stateT <= 0) {
+        this.telegraphs = this.telegraphs.filter((t) => t !== tg);
+        b.state = 'ringHit';
+        b.stateT = BOSS.ringActive;
+        if (dist(b.x, b.y, p.x, p.y) <= BOSS.ringRadius + p.radius) {
+          this.damagePlayer(BOSS.ringDamage, 'boss-ring');
+        }
+        this.audio.play('ring');
+      }
+      return;
+    }
+    if (b.state === 'ringHit') {
+      b.stateT -= dt;
+      if (b.stateT <= 0) { b.state = 'recovery'; b.stateT = BOSS.recovery; b.patternIdx = (b.patternIdx + 1) % 3; }
+      return;
+    }
+    if (b.state === 'fanTel') {
+      b.stateT -= dt * speedMul;
+      b.telegraphing = true;
+      b.moving = false;
+      if (b.stateT <= 0) {
+        const base = Math.atan2(p.y - b.y, p.x - b.x);
+        for (let i = 0; i < BOSS.fanShards; i++) {
+          const a = base + ((i - (BOSS.fanShards - 1) / 2) * BOSS.fanSpreadDeg * Math.PI) / 180;
+          this.projectiles.push(createProjectile(
+            b.x + Math.cos(a) * 20, b.y + Math.sin(a) * 20,
+            Math.cos(a) * BOSS.fanSpeed, Math.sin(a) * BOSS.fanSpeed,
+            BOSS.fanDamage, 'shard', BOSS.fanLife,
+          ));
+        }
+        b.state = 'recovery';
+        b.stateT = BOSS.recovery;
+        b.patternIdx = (b.patternIdx + 1) % 3;
+        this.audio.play('fan');
+      }
+      return;
+    }
+    if (b.state === 'echoTel') {
+      b.stateT -= dt * speedMul;
+      b.telegraphing = true;
+      b.moving = false;
+      // Markers follow the player's position at cast time (fixed at start).
+      if (!b.echoMarks.length) {
+        const base = Math.atan2(p.y - b.y, p.x - b.x);
+        const px = -Math.sin(base), py = Math.cos(base);
+        b.echoMarks = [
+          { x: p.x, y: p.y },
+          { x: p.x + px * BOSS.echoOffsets, y: p.y + py * BOSS.echoOffsets },
+          { x: p.x - px * BOSS.echoOffsets, y: p.y - py * BOSS.echoOffsets },
+        ];
+        for (const m of b.echoMarks) {
+          this.telegraphs.push({
+            kind: 'ring', owner: b, x: m.x, y: m.y, r: BOSS.echoRadius,
+            life: BOSS.echoDelay, maxLife: BOSS.echoDelay, final: false, color: '#76dde0',
+          });
+        }
+      }
+      for (const tg of this.telegraphs) {
+        if (tg.owner === b && tg.kind === 'ring') tg.final = b.stateT <= 0.15;
+      }
+      if (b.stateT <= 0) {
+        this.telegraphs = this.telegraphs.filter((t) => !(t.owner === b && t.kind === 'ring'));
+        for (const m of b.echoMarks) {
+          if (dist(m.x, m.y, p.x, p.y) <= BOSS.echoRadius + p.radius) {
+            this.damagePlayer(BOSS.echoDamage, 'boss-echo');
+          }
+          burstParticles(this.particles, this.vrng, m.x, m.y, '#76dde0', 5, 70);
+        }
+        b.echoMarks = [];
+        b.state = 'recovery';
+        b.stateT = BOSS.recovery;
+        b.patternIdx = (b.patternIdx + 1) % 3;
+        this.audio.play('echo');
+      }
+      return;
+    }
+    if (b.state === 'recovery') {
+      b.stateT -= dt * speedMul;
+      b.moving = false;
+      if (b.stateT <= 0) { b.state = 'chase'; b.stateT = 1.0; }
+    }
+  }
+
+  bossStartPattern() {
+    const b = this.boss;
+    const pattern = b.patternIdx % 3;
+    if (pattern === 0) { b.state = 'ringTel'; b.stateT = BOSS.ringTelegraph; }
+    else if (pattern === 1) { b.state = 'fanTel'; b.stateT = BOSS.fanTelegraph; }
+    else { b.state = 'echoTel'; b.stateT = BOSS.echoDelay; b.echoMarks = []; }
+  }
+
+  // ---- projectiles / loot / embers / telegraphs / streaks ----
+  updateProjectiles(dt) {
+    const p = this.player;
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const pr = this.projectiles[i];
+      pr.life -= dt;
+      const nx = pr.x + pr.vx * dt, ny = pr.y + pr.vy * dt;
+      const tx = Math.floor(nx / TILE), ty = Math.floor(ny / TILE);
+      if (pr.life <= 0 || !isFloor(this.dungeon, tx, ty)) {
+        this.projectiles.splice(i, 1);
+        continue;
+      }
+      pr.x = nx; pr.y = ny;
+      if (pr.kind === 'bolt') {
+        // Player bolt: hits the boss first, then enemies.
+        if (this.boss && dist(pr.x, pr.y, this.boss.x, this.boss.y) <= this.boss.radius + pr.radius) {
+          this.damageBoss(pr.damage, 'bolt');
+          this.projectiles.splice(i, 1);
+          continue;
+        }
+        let hit = false;
+        for (const e of [...this.enemies]) {
+          if (dist(pr.x, pr.y, e.x, e.y) <= e.radius + pr.radius) {
+            this.damageEnemy(e, pr.damage, 'bolt');
+            hit = true;
+            break;
+          }
+        }
+        if (hit) this.projectiles.splice(i, 1);
+      } else {
+        // Enemy projectiles hurt the player.
+        if (dist(pr.x, pr.y, p.x, p.y) <= p.radius + pr.radius) {
+          this.damagePlayer(pr.damage, pr.kind);
+          this.projectiles.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  updateLoot(dt) {
+    const p = this.player;
+    for (let i = this.loot.length - 1; i >= 0; i--) {
+      const l = this.loot[i];
+      l.life -= dt;
+      if (l.life <= 0) { this.loot.splice(i, 1); continue; }
+      // Scatter velocity decays.
+      l.x += l.vx * dt;
+      l.y += l.vy * dt;
+      l.vx *= 0.9; l.vy *= 0.9;
+      if (!circleFits(this.dungeon, l.x, l.y, 6)) { l.x -= l.vx * dt; l.y -= l.vy * dt; l.vx = 0; l.vy = 0; }
+      const d = dist(l.x, l.y, p.x, p.y);
+      const collectR = l.kind === 'heart' || l.kind === 'bigheart' ? LOOT.collectHeart : LOOT.collectCoin;
+      if (d <= LOOT.magnetRange) {
+        const a = Math.atan2(p.y - l.y, p.x - l.x);
+        l.x += Math.cos(a) * LOOT.magnetSpeed * dt;
+        l.y += Math.sin(a) * LOOT.magnetSpeed * dt;
+      }
+      if (dist(l.x, l.y, p.x, p.y) <= collectR) {
+        if (l.kind === 'coin') {
+          this.coins++;
+          this.score += LOOT.coinScore;
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+2', '#ffd76a', 18);
+          this.audio.play('coin');
+        } else if (l.kind === 'shard') {
+          this.shards++;
+          this.score += LOOT.shardScore;
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+25', '#7fb8ff', 18);
+          this.audio.play('coin');
+        } else {
+          const heal = l.kind === 'bigheart' ? BOSS.lootHeart : LOOT.heartHeal;
+          p.hp = Math.min(p.maxHp, p.hp + heal);
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, `+${heal}`, '#6fe08a', 18);
+          this.audio.play('heal');
+        }
+        this.loot.splice(i, 1);
+        this.updateHUD();
+      }
+    }
+  }
+
+  updateEmbers(dt) {
+    for (let i = this.embers.length - 1; i >= 0; i--) {
+      const e = this.embers[i];
+      e.life -= dt;
+      e.tickT -= dt;
+      if (e.tickT <= 0) {
+        e.tickT = SKILLS.ember.tickEvery;
+        for (const en of [...this.enemies]) {
+          if (dist(e.x, e.y, en.x, en.y) <= e.r + en.radius) this.damageEnemy(en, e.tick, 'skill', '#ff8a2a');
+        }
+        if (this.boss && dist(e.x, e.y, this.boss.x, this.boss.y) <= e.r + this.boss.radius) {
+          this.damageBoss(e.tick, 'skill');
+        }
+      }
+      if (e.life <= 0) this.embers.splice(i, 1);
+    }
+  }
+
+  updateTelegraphs(dt) {
+    // Telegraphs are owned by their attacker states (ring/echo set their
+    // own life); this only ages free-standing ones (none right now) and
+    // drops aim lines whose owner stopped aiming.
+    for (let i = this.telegraphs.length - 1; i >= 0; i--) {
+      const tg = this.telegraphs[i];
+      if (tg.kind === 'aim') {
+        const owner = tg.owner;
+        if (!owner || owner.state !== 'aim') this.telegraphs.splice(i, 1);
+      }
+    }
+  }
+
+  updateStreaks(dt) {
+    for (let i = this.streaks.length - 1; i >= 0; i--) {
+      const s = this.streaks[i];
+      s.t += dt;
+      s.h -= 26 * dt;
+      if (s.h <= 0.4) this.streaks.splice(i, 1);
+    }
+  }
+
+  updateChests() {
+    const p = this.player;
+    for (const c of this.dungeon.chests) {
+      if (c.opened) continue;
+      if (dist(c.x, c.y, p.x, p.y) <= 36) {
+        c.opened = true;
+        const n = this.chestCoins.get(c) || 5;
+        this.coins += n;
+        this.score += n * LOOT.coinScore;
+        addDamageNumber(this.damageNumbers, c.x, c.y - 20, `+${n}`, '#ffd76a', 18);
+        burstParticles(this.particles, this.vrng, c.x, c.y, '#ffd76a', 6, 70);
+        this.audio.play('coin');
+        this.updateHUD();
+      }
+    }
+  }
+
+  updateStatues(dt) {
+    const p = this.player;
+    for (const s of this.dungeon.statues) {
+      if (s.used) continue;
+      if (dist(s.x, s.y, p.x, p.y) <= 42) {
+        s.channel = (s.channel || 0) + dt;
+        if (s.channel >= LOOT.statueTime) {
+          s.used = true;
+          p.energy = Math.min(PLAYER.energyMax, p.energy + LOOT.statueEnergy);
+          addDamageNumber(this.damageNumbers, s.x, s.y - 24, '+20 energy', '#76dde0', 16);
+          this.audio.play('heal');
+          this.updateHUD();
+        }
+      } else {
+        s.channel = 0;
+      }
+    }
+  }
+
+  // ---- run end ----
+  endRun(result) {
+    if (this.done) return;
+    if (result === 'victory') {
+      this.score += VICTORY_BONUS;
+      this.state = 'victory';
+    } else {
+      this.score += DEFEAT_PER_WAVE * Math.max(0, this.wave - 1);
+      this.state = 'defeat';
+    }
+    this.done = {
+      result,
+      score: this.score,
+      wave: this.wave,
+      time: Math.round(this.time * 10) / 10,
+      kills: this.kills,
+      hp: Math.max(0, Math.round(this.player.hp)),
+      maxHp: this.player.maxHp,
+      coins: this.coins,
+      shards: this.shards,
+      dungeonHash: hashTiles(this.dungeon.grid),
+    };
+    try {
+      const best = Number(localStorage.getItem('mosslight-best') || 0);
+      if (this.score > best) localStorage.setItem('mosslight-best', String(this.score));
+      this.done.best = Math.max(best, this.score);
+    } catch (e) { this.done.best = this.score; }
+    this.showResult();
+    this.updateHUD();
+  }
+
+  // ---- the deterministic bot (autotest + shot modes) ----
+  // Telegraph dodge (autotest bot): a unit direction to flee, or null.
+  // Reads the same telegraphs the renderer draws, so the bot reacts to
+  // what a player sees: ring circles (boss ring, brambler slam, boss echo
+  // marks), the boss fan, and tinket aim lines.
+  botDodgeDir() {
+    const p = this.player;
+    const r = p.radius;
+    // Ring telegraphs: leave the circle (radially away from its centre).
+    for (const tg of this.telegraphs) {
+      if (tg.kind === 'ring') {
+        const d = dist(p.x, p.y, tg.x, tg.y);
+        if (d < tg.r + r + 12) {
+          const a = Math.atan2(p.y - tg.y, p.x - tg.x);
+          return { x: Math.cos(a), y: Math.sin(a) };
+        }
+      }
+    }
+    // Boss fan: the shards fly at the player, so strafe sideways.
+    const boss = this.boss;
+    if (boss && boss.state === 'fanTel') {
+      const a = Math.atan2(p.y - boss.y, p.x - boss.x);
+      const s = this.bot.orbitDir || 1;
+      return { x: -Math.sin(a) * s, y: Math.cos(a) * s };
+    }
+    // Tinket aim line: step off the line (perpendicular).
+    for (const tg of this.telegraphs) {
+      if (tg.kind === 'aim') {
+        const dx = tg.x1 - tg.x0, dy = tg.y1 - tg.y0;
+        const len2 = dx * dx + dy * dy || 1;
+        let tt = ((p.x - tg.x0) * dx + (p.y - tg.y0) * dy) / len2;
+        tt = Math.max(0, Math.min(1, tt));
+        const cx = tg.x0 + dx * tt, cy = tg.y0 + dy * tt;
+        if (dist(p.x, p.y, cx, cy) < 26) {
+          const a = Math.atan2(dy, dx);
+          return { x: -Math.sin(a), y: Math.cos(a) };
+        }
+      }
+    }
     return null;
   }
 
-  // ---------------------------------------------------------- render
-  render() {
-    const g = this.ctx;
-    g.clearRect(0, 0, VIEW_W, VIEW_H);
-    if (this.state === 'title') { this.renderTitle(g); return; }
-    // Camera follows the player, clamped to the world.
-    const px = this.player ? this.player.x * SCALE : 0;
-    const py = this.player ? this.player.y * SCALE : 0;
-    let cx = Math.max(0, Math.min(WORLD_W * SCALE - VIEW_W, px - VIEW_W / 2)) + this.camOffset.x;
-    let cy = Math.max(0, Math.min(WORLD_H * SCALE - VIEW_H, py - VIEW_H / 2)) + this.camOffset.y;
-    if (this.shakeT > 0) {
-      cx += (Math.random() - 0.5) * 2 * this.shakeMag;
-      cy += (Math.random() - 0.5) * 2 * this.shakeMag;
-    }
-    this.cam = { x: cx, y: cy };
-    if (this.layer) g.drawImage(this.layer, -cx, -cy);
-    // Light vignette (screen-space, never over the player/HUD).
-    if (this.vignette) g.drawImage(this.vignette, 0, 0);
-    const X = (wx) => wx * SCALE - cx;
-    const Y = (wy) => wy * SCALE - cy;
-    // Chests and statues.
-    for (const c of this.dungeon.chests) {
-      if (c.opened) continue;
-      g.drawImage(this.sprites.chest, X(c.x) - 18, Y(c.y) - 18, 36, 36);
-    }
-    for (const s of this.dungeon.statues) {
-      g.drawImage(this.sprites.statue, X(s.x) - 16, Y(s.y) - 24, 32, 48);
-      if (!s.used) {
-        g.fillStyle = '#FFD76A';
-        g.font = 'bold 13px monospace';
-        g.textAlign = 'center';
-        g.fillText('✦', X(s.x), Y(s.y) - 30);
-      }
-    }
-    // Loot.
-    for (const l of this.loot.list) {
-      const spr = l.type === 'coin' ? this.sprites.coin : l.type === 'heart' || l.type === 'bigheart' ? this.sprites.heart : this.sprites.shard;
-      const sz = l.type === 'bigheart' ? 40 : 28;
-      const blink = l.life < 3 && Math.floor(l.life * 6) % 2 === 0;
-      if (!blink) g.drawImage(spr, X(l.x) - sz / 2, Y(l.y) - sz / 2, sz, sz);
-    }
-    // Ember patches. v3: brighter, with flame tongues around the edge
-    // swaying with time (render-only, no timing change).
-    for (const p of this.embers.list) {
-      g.fillStyle = 'rgba(255,138,42,0.45)';
-      g.beginPath(); g.arc(X(p.x), Y(p.y), p.radius * SCALE, 0, Math.PI * 2); g.fill();
-      g.fillStyle = 'rgba(255,210,90,0.6)';
-      g.beginPath(); g.arc(X(p.x), Y(p.y), p.radius * SCALE * 0.55, 0, Math.PI * 2); g.fill();
-      g.fillStyle = 'rgba(255,215,106,0.85)';
-      for (let i = 0; i < 5; i++) {
-        const a = i * 1.256 + this.time * 2.2;
-        const fx = X(p.x) + Math.cos(a) * p.radius * SCALE * 0.85;
-        const fy = Y(p.y) + Math.sin(a) * p.radius * SCALE * 0.85;
-        g.beginPath(); g.moveTo(fx - 5, fy + 4); g.lineTo(fx, fy - 8); g.lineTo(fx + 5, fy + 4); g.closePath(); g.fill();
-      }
-    }
-    // Interactive prop bases (reactions drawn after Neri).
-    this.renderInteractiveBases(g, X, Y);
-    // Ambient particles (behind enemies).
-    if (this.ambient) this.ambient.render(g, X, Y);
-    // Boss telegraphs (floor markers, drawn before entities).
-    if (this.boss?.telegraph) this.renderBossTelegraph(g, X, Y);
-    // Enemies.
-    for (const e of this.enemies) this.renderEnemy(g, e, X, Y);
-    // Boss.
-    if (this.boss) this.renderBoss(g, X, Y);
-    // Player + lantern + moth.
-    if (this.player.alive) this.renderPlayer(g, X, Y);
-    // Interactive reaction glows (after Neri, per Astra's draw order).
-    this.renderInteractiveGlows(g, X, Y);
-    // Expanding death rings.
-    for (const r of this.rings) {
-      const frac = r.t / r.dur;
-      g.strokeStyle = `rgba(${r.color},${(1 - frac) * 0.8})`;
-      g.lineWidth = 4;
-      g.beginPath(); g.arc(X(r.x), Y(r.y), (20 + (r.maxR - 20) * frac) * SCALE, 0, Math.PI * 2); g.stroke();
-    }
-    // Slash arc. v3: a big white crescent slash facing the attack, with
-    // an orange glow underneath — like the reference slash effect.
-    if (this.slashT > 0) {
-      const p = this.player;
-      const ang = Math.atan2(p.facing.y, p.facing.x);
-      const r = 56 * SCALE * (1.2 - this.slashT);
-      g.strokeStyle = 'rgba(255,138,42,0.55)';
-      g.lineWidth = 16;
-      g.beginPath(); g.arc(X(p.x), Y(p.y), r, ang - 1.1, ang + 1.1); g.stroke();
-      g.strokeStyle = 'rgba(255,255,255,0.95)';
-      g.lineWidth = 10;
-      g.beginPath(); g.arc(X(p.x), Y(p.y), r, ang - 1.1, ang + 1.1); g.stroke();
-    }
-    // Starfall wind-up ring.
-    if (this.starfallFx) {
-      const p = this.player;
-      const t = 1 - this.starfallFx.t / SKILLS[3].windup;
-      g.strokeStyle = `rgba(255,215,106,${0.4 + 0.6 * t})`;
-      g.lineWidth = 5;
-      g.beginPath(); g.arc(X(p.x), Y(p.y), 135 * SCALE * t, 0, Math.PI * 2); g.stroke();
-      // v3: falling star streaks converge on the ring (render-only).
-      g.strokeStyle = 'rgba(255,215,106,0.9)';
-      g.lineWidth = 4;
-      for (let i = 0; i < 5; i++) {
-        const a = i * 1.256 + this.time * 1.5;
-        const r1 = 135 * SCALE * (0.4 + 0.6 * t);
-        const r2 = r1 - 26;
-        g.beginPath();
-        g.moveTo(X(p.x) + Math.cos(a) * r1, Y(p.y) + Math.sin(a) * r1);
-        g.lineTo(X(p.x) + Math.cos(a) * r2, Y(p.y) + Math.sin(a) * r2);
-        g.stroke();
-      }
-    }
-    // Projectiles. v3: glow + short trail so bolts read as bright shots.
-    for (const pr of this.projectiles.list) {
-      const col = pr.from === 'player' ? '#FFE9A8' : pr.from === 'enemy' ? '#35C9D0' : '#76DDE0';
-      g.save();
-      g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = 0.35;
-      g.fillStyle = col;
-      g.beginPath(); g.arc(X(pr.x), Y(pr.y), pr.radius * SCALE * 2.2, 0, Math.PI * 2); g.fill();
-      g.restore();
-      g.strokeStyle = col; g.lineWidth = pr.radius * SCALE;
-      g.beginPath(); g.moveTo(X(pr.x - pr.vx * 0.045), Y(pr.y - pr.vy * 0.045)); g.lineTo(X(pr.x), Y(pr.y)); g.stroke();
-      g.fillStyle = col;
-      g.beginPath(); g.arc(X(pr.x), Y(pr.y), pr.radius * SCALE, 0, Math.PI * 2); g.fill();
-      g.fillStyle = '#FFFFFF';
-      g.beginPath(); g.arc(X(pr.x), Y(pr.y), pr.radius * SCALE * 0.4, 0, Math.PI * 2); g.fill();
-    }
-    // Particles.
-    for (const pt of this.particles.list) {
-      g.globalAlpha = Math.max(0, pt.life / pt.maxLife);
-      g.fillStyle = pt.color;
-      g.fillRect(X(pt.x) - pt.size, Y(pt.y) - pt.size, pt.size * 2, pt.size * 2);
-    }
-    g.globalAlpha = 1;
-    // Damage numbers. v3: bigger and bolder, like the reference images —
-    // thick dark outline on all 4 sides, per-item size (boss hits bigger).
-    g.textAlign = 'center';
-    for (const d of this.dmgNums.list) {
-      g.globalAlpha = Math.max(0, d.life / FEEL.dmgNumLife);
-      g.font = `bold ${d.size || 22}px monospace`;
-      g.fillStyle = '#141414';
-      g.fillText(String(d.value), X(d.x) + 2, Y(d.y));
-      g.fillText(String(d.value), X(d.x) - 2, Y(d.y));
-      g.fillText(String(d.value), X(d.x), Y(d.y) + 2);
-      g.fillText(String(d.value), X(d.x), Y(d.y) - 2);
-      g.fillStyle = d.color;
-      g.fillText(String(d.value), X(d.x), Y(d.y));
-    }
-    g.globalAlpha = 1;
-    // Aim line for tinkets.
-    for (const e of this.enemies) {
-      if (e.type === 'tinket' && e.state === 'aim') {
-        g.strokeStyle = 'rgba(53,201,208,0.8)';
-        g.lineWidth = 3;
-        g.beginPath();
-        g.moveTo(X(e.x), Y(e.y));
-        g.lineTo(X(e.x) + Math.cos(e.aimAngle) * 145 * SCALE, Y(e.y) + Math.sin(e.aimAngle) * 145 * SCALE);
-        g.stroke();
-      }
-    }
-  }
-
-  renderBossTelegraph(g, X, Y) {
-    const b = this.boss, t = b.telegraph;
-    if (!t) return;
-    const frac = Math.min(1, t.t / t.dur);
-    const strong = frac > 0.8;
-    if (t.kind === 'ring') {
-      g.fillStyle = strong ? 'rgba(255,80,80,0.55)' : 'rgba(255,80,80,0.25)';
-      g.beginPath(); g.arc(X(b.x), Y(b.y), BOSS.ringRadius * SCALE * (0.3 + 0.7 * frac), 0, Math.PI * 2); g.fill();
-      g.strokeStyle = '#FF5050'; g.lineWidth = 3;
-      g.beginPath(); g.arc(X(b.x), Y(b.y), BOSS.ringRadius * SCALE * (0.3 + 0.7 * frac), 0, Math.PI * 2); g.stroke();
-    } else if (t.kind === 'fan') {
-      g.fillStyle = strong ? 'rgba(118,221,224,0.5)' : 'rgba(118,221,224,0.22)';
-      for (let i = -2; i <= 2; i++) {
-        const a = t.angle + (i * BOSS.fanSpread * Math.PI) / 180;
-        g.beginPath();
-        g.moveTo(X(b.x), Y(b.y));
-        g.lineTo(X(b.x) + Math.cos(a - 0.08) * 300, Y(b.y) + Math.sin(a - 0.08) * 300);
-        g.lineTo(X(b.x) + Math.cos(a + 0.08) * 300, Y(b.y) + Math.sin(a + 0.08) * 300);
-        g.closePath(); g.fill();
-      }
-    } else if (t.kind === 'drop') {
-      g.fillStyle = strong ? 'rgba(185,169,240,0.6)' : 'rgba(185,169,240,0.3)';
-      for (const off of [-BOSS.dropOffset, 0, BOSS.dropOffset]) {
-        g.beginPath(); g.arc(X(t.x + off), Y(t.y), BOSS.dropRadius * SCALE, 0, Math.PI * 2); g.fill();
-        g.strokeStyle = '#B9A9F0'; g.lineWidth = 3;
-        g.beginPath(); g.arc(X(t.x + off), Y(t.y), BOSS.dropRadius * SCALE, 0, Math.PI * 2); g.stroke();
-      }
-    }
-  }
-
-  renderEnemy(g, e, X, Y) {
-    // Ground shadow (no shadowBlur).
-    g.fillStyle = 'rgba(12,18,32,0.30)';
-    g.beginPath(); g.ellipse(X(e.x), Y(e.y) + 9 * SCALE, 12 * SCALE, 3 * SCALE, 0, 0, Math.PI * 2); g.fill();
-    // Hit flash uses the per-type flash sprite (visual only).
-    let spr = e.type === 'puffcap' ? this.sprites.puffcap : e.type === 'tinket' ? this.sprites.tinket : this.sprites.brambler;
-    if (e.flash > 0) {
-      spr = e.type === 'puffcap' ? this.sprites.puffFlash : e.type === 'tinket' ? this.sprites.tinkFlash : this.sprites.bramFlash;
-    }
-    const bob = e.state === 'hop' ? -4 : Math.sin(this.time * 8 + e.id) * 1.5;
-    const w = spr.width * SCALE, h = spr.height * SCALE;
-    const sx = X(e.x) - w / 2, sy = Y(e.y) - h / 2 + bob * SCALE;
-    g.drawImage(spr, sx, sy, w, h);
-    // Telegraphs (Astra §7) — all visual, no timing changes.
-    if (e.type === 'puffcap' && e.state === 'pause') {
-      // Cap flashes #FFF0A6 twice over 240ms + 3px ring.
-      const phase = Math.floor((ENEMIES.puffcap.pause - e.stateT) / 0.12) % 2;
-      if (phase === 0) {
-        g.fillStyle = '#FFF0A6';
-        g.fillRect(sx + w * 0.25, sy + h * 0.1, w * 0.5, h * 0.2);
-      }
-      g.strokeStyle = 'rgba(255,240,166,0.8)'; g.lineWidth = 3;
-      g.beginPath(); g.arc(X(e.x), Y(e.y), e.radius * SCALE + 6, 0, Math.PI * 2); g.stroke();
-    } else if (e.type === 'tinket' && e.state === 'aim') {
-      // Lens -> #FFF0A6, key rotates 90° over 180ms, 2 yellow marks.
-      const frac = Math.min(1, (ENEMIES.tinket.aimTime - e.stateT) / 0.18);
-      g.fillStyle = '#FFF0A6';
-      g.beginPath(); g.arc(sx + w * 0.62, sy + h * 0.32, 4, 0, Math.PI * 2); g.fill();
-      g.save();
-      g.translate(sx + w * 0.18, sy + h * 0.3);
-      g.rotate(frac * Math.PI / 2);
-      g.fillStyle = '#E05B4F';
-      g.fillRect(-2, -8, 4, 16);
-      g.restore();
-      g.fillStyle = '#FFF0A6';
-      g.fillRect(X(e.x) - 14, Y(e.y) - e.radius * SCALE - 14, 4, 4);
-      g.fillRect(X(e.x) + 10, Y(e.y) - e.radius * SCALE - 14, 4, 4);
-    } else if (e.type === 'brambler' && e.state === 'root') {
-      // Leaves brighten + green ring 8->18px over 260ms + eyes #FFF0A6.
-      const frac = Math.min(1, (ENEMIES.brambler.rootTime - e.stateT) / 0.26);
-      g.strokeStyle = `rgba(227,255,154,${0.5 + 0.5 * frac})`; g.lineWidth = 3;
-      g.beginPath(); g.arc(X(e.x), Y(e.y), (8 + 10 * frac) * SCALE, 0, Math.PI * 2); g.stroke();
-      g.fillStyle = '#FFF0A6';
-      g.fillRect(sx + w * 0.17, sy + h * 0.33, 4, 4);
-      g.fillRect(sx + w * 0.54, sy + h * 0.33, 4, 4);
-    }
-    // Small HP bar when hurt. v3: wider, taller, white border — readable.
-    if (e.hp < e.maxHp) {
-      const bw = 34, bx = X(e.x) - bw / 2, by = Y(e.y) - e.radius * SCALE - 12;
-      g.fillStyle = '#FFFFFF'; g.fillRect(bx - 1, by - 1, bw + 2, 8);
-      g.fillStyle = '#1A1A1A'; g.fillRect(bx, by, bw, 6);
-      g.fillStyle = '#E94F62'; g.fillRect(bx, by, bw * (e.hp / e.maxHp), 6);
-    }
-  }
-
-  renderBoss(g, X, Y) {
-    const b = this.boss;
-    // v3: cyan glow pool under the bell so the boss reads from across
-    // the room (render-only).
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = 0.18;
-    g.fillStyle = '#45C6C4';
-    g.beginPath(); g.ellipse(X(b.x), Y(b.y), 64 * SCALE, 40 * SCALE, 0, 0, Math.PI * 2); g.fill();
-    g.restore();
-    // Ground shadow (60x14 at +24).
-    g.fillStyle = 'rgba(18,20,50,0.42)';
-    g.beginPath(); g.ellipse(X(b.x), Y(b.y) + 24 * SCALE, 30 * SCALE, 7 * SCALE, 0, 0, Math.PI * 2); g.fill();
-    const spr = b.flash > 0 ? this.sprites.bellWhite : this.sprites.bell;
-    const bob = Math.sin(this.time * 3) * 3;
-    const w = spr.width * SCALE, h = spr.height * SCALE;
-    // Clapper swing: the whole bell sways 3px while telegraphing.
-    const sway = b.telegraph ? Math.sin(this.time * 22) * 3 : 0;
-    g.drawImage(spr, X(b.x) - w / 2 + sway, Y(b.y) - h / 2 + bob, w, h);
-    // Telegraph: crown flashes #FFF0A6 + cyan ring 48->68px over 360ms.
-    if (b.telegraph) {
-      const frac = Math.min(1, b.telegraph.t / 0.36);
-      g.fillStyle = '#FFF0A6';
-      g.fillRect(X(b.x) - 10, Y(b.y) - h / 2 + bob - 4, 20, 8);
-      g.strokeStyle = `rgba(178,255,255,${0.6 * (1 - frac * 0.4)})`; g.lineWidth = 4;
-      g.beginPath(); g.arc(X(b.x), Y(b.y), (48 + 20 * frac) * SCALE, 0, Math.PI * 2); g.stroke();
-      // Mouth -> #8F4F9F in the final 100ms.
-      if (b.telegraph.t > b.telegraph.dur - 0.1) {
-        g.fillStyle = '#8F4F9F';
-        g.fillRect(X(b.x) - 12, Y(b.y) + 14 + bob, 24, 10);
-      }
-    }
-    // Hit flash: white 80ms + 4-point star 100ms.
-    if (b.flash > 0) {
-      const cx = X(b.x), cy = Y(b.y);
-      g.fillStyle = 'rgba(255,255,255,0.9)';
-      g.fillRect(cx - 2, cy - 16, 4, 32);
-      g.fillRect(cx - 16, cy - 2, 32, 4);
-    }
-    // Roar flash.
-    if (b.state === 'roar') {
-      g.strokeStyle = 'rgba(255,215,106,0.8)';
-      g.lineWidth = 4;
-      g.beginPath(); g.arc(X(b.x), Y(b.y), (b.radius + 14) * SCALE, 0, Math.PI * 2); g.stroke();
-    }
-  }
-
-  renderInteractiveBases(g, X, Y) {
-    for (const st of this.interState) {
-      if (st.broken) continue;
-      const s = st.slot;
-      const spr = this.interSprites[this.area]?.[st.kind];
-      if (!spr) continue;
-      const [w, h] = INTERACTIVE_SIZE[st.kind];
-      const cx = X(s.x), cy = Y(s.y);
-      const dw = (w + 8) * SCALE, dh = (h + 8) * SCALE;
-      if (st.tilt !== 0 || st.rot !== 0) {
-        g.save();
-        g.translate(cx, cy);
-        g.rotate(st.tilt || st.rot);
-        g.drawImage(spr, -dw / 2, -dh / 2, dw, dh);
-        g.restore();
-      } else if (st.open > 0 && st.kind === 'starflower') {
-        const sc = 1 + 0.15 * st.open;
-        g.drawImage(spr, cx - (dw * sc) / 2, cy - (dh * sc) / 2, dw * sc, dh * sc);
-      } else {
-        g.drawImage(spr, cx - dw / 2, cy - dh / 2, dw, dh);
-      }
-    }
-  }
-
-  renderInteractiveGlows(g, X, Y) {
-    for (const st of this.interState) {
-      if (st.broken) continue;
-      const s = st.slot;
-      const cx = X(s.x), cy = Y(s.y);
-      const glowA = Math.max(st.glow, st.flare * 0.9);
-      if (glowA > 0.05 && (st.kind === 'vine' || st.kind === 'crystal' || st.kind === 'rune' || st.kind === 'brazier')) {
-        const col = st.kind === 'brazier' ? '255,138,42' : st.kind === 'crystal' ? '217,245,255' : st.kind === 'rune' ? '199,216,255' : '255,240,166';
-        g.save();
-        g.globalCompositeOperation = 'lighter';
-        g.globalAlpha = glowA * 0.35;
-        g.fillStyle = `rgba(${col},1)`;
-        g.beginPath(); g.arc(cx, cy, 13 * SCALE, 0, Math.PI * 2); g.fill();
-        g.restore();
-      }
-    }
-  }
-
-  renderPlayer(g, X, Y) {
+  botStep(dt) {
     const p = this.player;
-    // Frame: hurt (120ms) > cast (160ms) > walk (4 frames @110ms) > idle.
-    let spr, frameIdx = 0;
-    if (p.hurtT > 0) spr = this.sprites.neriHurt;
-    else if (p.castT > 0) spr = this.sprites.neriCast;
-    else if (p.moving) {
-      frameIdx = Math.floor(p.walkPhase / 1.1) % 4;
-      spr = this.sprites.neri[frameIdx + 1];
-    } else spr = this.sprites.neri[0];
-    const bob = p.moving ? Math.sin(p.walkPhase * 2) * 1 : 0;
-    const w = spr.width * SCALE, h = spr.height * SCALE;
-    const px = X(p.x), py = Y(p.y);
-    // v3: soft amber aura ring under Neri so the hero is findable at a
-    // glance, even on a crowded screen (render-only).
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = 0.20;
-    g.fillStyle = '#FFC857';
-    g.beginPath(); g.arc(px, py, 34 * SCALE, 0, Math.PI * 2); g.fill();
-    g.restore();
-    // Ground shadow (30x8 at +17).
-    g.fillStyle = 'rgba(12,18,32,0.34)';
-    g.beginPath(); g.ellipse(px, py + 17 * SCALE, 15 * SCALE, 4 * SCALE, 0, 0, Math.PI * 2); g.fill();
-    // Moth companion (drawn BEFORE Neri, rear-left, per Astra's order).
-    const tms = this.time * 1000;
-    const mbaseX = px - 24, mbaseY = py - 12;
-    const mx = mbaseX + Math.sin(tms * 0.004 + this.mothPhase) * 8;
-    const my = mbaseY + Math.sin(tms * 0.007 + this.mothPhase * 1.7) * 5;
-    const mframe = Math.floor(tms / 90) % 2;
-    g.drawImage(this.sprites.moth[mframe], mx - 7, my - 5, 14, 10);
-    // 2px sparkle every 1.4s.
-    if ((tms + this.mothPhase * 1000) % 1400 < 100) {
-      g.fillStyle = '#FFF0A6';
-      g.fillRect(mx + 6, my - 8, 2, 2);
+    const b = this.bot;
+    // Stuck detection (v3 bot): barely moved for 1.5s -> wander in a
+    // seeded-random direction for 0.7s (escapes corners and wedges).
+    if (Math.hypot(p.x - b.lastX, p.y - b.lastY) < 0.5) b.stuckT += dt;
+    else { b.stuckT = 0; b.lastX = p.x; b.lastY = p.y; }
+    if (b.stuckT > 1.5) {
+      const a = this.rng.f() * Math.PI * 2;
+      b.wanderX = Math.cos(a); b.wanderY = Math.sin(a);
+      b.wanderT = 0.7;
+      b.stuckT = 0;
     }
-    // Neri.
-    if (p.invuln > 0 && Math.floor(this.time * 12) % 2 === 0) g.globalAlpha = 0.5;
-    g.drawImage(spr, px - w / 2, py - h / 2 + bob, w, h);
-    g.globalAlpha = 1;
-    // Lantern: 3-band radial glow (lighter) + sprite at the per-frame offset.
-    // Cast frame: bigger lantern (8x8) + white crescent toward the aim;
-    // hurt frame: lantern lowered.
-    let off, lw = 12, lh = 14, crescent = false;
-    if (p.castT > 0) { off = [-12, 13]; lw = 16; lh = 16; crescent = true; }
-    else if (p.hurtT > 0) { off = [-6, 21]; }
-    else off = this.sprites.lanternPos[frameIdx];
-    const lx = px + off[0], ly = py + off[1] + bob;
-    const flick = Math.max(0.90, Math.min(1.10, 1.0 + 0.06 * Math.sin(tms * 0.011 + this.lanternSeed) + 0.025 * Math.sin(tms * 0.027 + this.lanternSeed * 2.1)));
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = Math.min(1, flick);
-    g.drawImage(this.sprites.lanternGlow, lx - 72, ly - 72, 144, 144);
-    g.restore();
-    g.drawImage(this.sprites.lantern, lx - lw / 2, ly - lh / 2, lw, lh);
-    if (crescent) {
-      // White crescent toward the aim (facing) side.
-      const fx = p.facing.x >= 0 ? 1 : -1;
-      g.fillStyle = '#FFF0A6';
-      g.fillRect(lx + fx * 8 - 1, ly - 6, 3, 3);
-      g.fillRect(lx + fx * 10 - 1, ly - 2, 3, 3);
-      g.fillRect(lx + fx * 8 - 1, ly + 3, 3, 3);
+    // Telegraph dodge (highest priority): move directly, skip the BFS path.
+    let dodged = false;
+    let dodge = this.botDodgeDir();
+    if (!dodge && b.wanderT > 0) {
+      b.wanderT -= dt;
+      dodge = { x: b.wanderX, y: b.wanderY };
     }
-    // Glassguard shield ring.
-    if (p.shield > 0) {
-      g.strokeStyle = 'rgba(127,212,255,0.85)';
-      g.lineWidth = 5;
-      g.beginPath(); g.arc(px, py, (p.radius + 8) * SCALE, 0, Math.PI * 2); g.stroke();
+    if (dodge) {
+      const moved = moveCircle(this.dungeon, p.x, p.y, p.moveRadius, dodge.x * p.speed * dt, dodge.y * p.speed * dt);
+      p.x = moved.x; p.y = moved.y;
+      p.faceAngle = Math.atan2(dodge.y, dodge.x);
+      p.moving = true;
+      dodged = true;
+    }
+    // Movement target.
+    let tx = null, ty = null, mode = 'chase';
+    if (this.boss) {
+      // Hold a 150-160px ring around the boss, orbiting slowly.
+      const d = dist(p.x, p.y, this.boss.x, this.boss.y);
+      b.orbitT -= dt;
+      if (b.orbitT <= 0) { b.orbitDir *= -1; b.orbitT = 2; }
+      const a = Math.atan2(p.y - this.boss.y, p.x - this.boss.x);
+      if (d < 140) {
+        // Back away along the radial.
+        tx = this.boss.x + Math.cos(a) * 175;
+        ty = this.boss.y + Math.sin(a) * 175;
+      } else if (d > 175) {
+        tx = this.boss.x + Math.cos(a) * 155;
+        ty = this.boss.y + Math.sin(a) * 155;
+      } else {
+        // Orbit tangentially.
+        const ta = a + b.orbitDir * 0.5;
+        tx = this.boss.x + Math.cos(ta) * 160;
+        ty = this.boss.y + Math.sin(ta) * 160;
+      }
+      mode = 'boss';
+    } else if (this.enemies.length) {
+      // Nearest enemy; kite inside bolt range, back off when crowded.
+      let near = null, nd = Infinity;
+      for (const e of this.enemies) {
+        const d = dist(p.x, p.y, e.x, e.y);
+        if (d < nd) { nd = d; near = e; }
+      }
+      if (near) {
+        const a = Math.atan2(p.y - near.y, p.x - near.x);
+        if (nd < 70) {
+          tx = p.x + Math.cos(a) * 90;
+          ty = p.y + Math.sin(a) * 90;
+        } else if (nd > 165) {
+          tx = near.x; ty = near.y;
+        } else {
+          // Strafe: hold range, drift sideways.
+          const ta = a + 0.6;
+          tx = near.x + Math.cos(ta) * 150;
+          ty = near.y + Math.sin(ta) * 150;
+        }
+        mode = 'chase';
+      }
+    } else {
+      // Nothing to fight: walk to the centre of the nearest room of the
+      // current area so the next spawn group finds the player nearby.
+      const def = WAVES[this.wave - 1];
+      const rooms = this.dungeon.rooms.filter((r) => r.area === def.area);
+      let room = rooms[0], rd = Infinity;
+      for (const r of rooms) {
+        const cx = (r.x + r.w / 2) * TILE, cy = (r.y + r.h / 2) * TILE;
+        const d = dist(p.x, p.y, cx, cy);
+        if (d < rd) { rd = d; room = r; }
+      }
+      tx = (room.x + room.w / 2) * TILE;
+      ty = (room.y + room.h / 2) * TILE;
+      mode = 'idle';
+    }
+    // Follow the target with BFS (repath every 1s or on target change).
+    if (dodged) {
+      // Already moved directly (dodge / wander); nothing more here.
+    } else if (tx !== null) {
+      const changed = !b.target || Math.hypot(tx - b.target.x, ty - b.target.y) > 40;
+      b.repathT -= dt;
+      if (changed || b.repathT <= 0 || b.pathI >= b.path.length) {
+        b.target = { x: tx, y: ty };
+        b.path = findPath(this.dungeon, p.x, p.y, tx, ty);
+        if (!b.path.length) {
+          // Unreachable target (fleeing into a wall while cornered):
+          // try the same distance at 90-degree rotations until one works.
+          const d0 = Math.hypot(tx - p.x, ty - p.y) || 90;
+          const a0 = Math.atan2(ty - p.y, tx - p.x);
+          for (const da of [Math.PI / 2, -Math.PI / 2, Math.PI]) {
+            const ax = p.x + Math.cos(a0 + da) * d0, ay = p.y + Math.sin(a0 + da) * d0;
+            const alt = findPath(this.dungeon, p.x, p.y, ax, ay);
+            if (alt.length) { b.target = { x: ax, y: ay }; b.path = alt; break; }
+          }
+        }
+        b.pathI = 0;
+        b.repathT = 1;
+      }
+      if (b.path && b.pathI < b.path.length) {
+        const wp = b.path[b.pathI];
+        const dx = wp.x - p.x, dy = wp.y - p.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 10) { b.pathI++; }
+        else {
+          const mx = dx / d, my = dy / d;
+          const moved = moveCircle(this.dungeon, p.x, p.y, p.moveRadius, mx * p.speed * dt, my * p.speed * dt);
+          p.x = moved.x; p.y = moved.y;
+          p.faceAngle = Math.atan2(my, mx);
+          p.moving = true;
+        }
+      } else {
+        // No path (already there or blocked): walk straight.
+        const dx = tx - p.x, dy = ty - p.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 8) {
+          const moved = moveCircle(this.dungeon, p.x, p.y, p.moveRadius, (dx / d) * p.speed * dt, (dy / d) * p.speed * dt);
+          p.x = moved.x; p.y = moved.y;
+          p.faceAngle = Math.atan2(dy, dx);
+          p.moving = true;
+        } else {
+          p.moving = false;
+        }
+      }
+    } else {
+      p.moving = false;
+    }
+    if (mode !== 'chase' && mode !== 'boss') p.moving = p.moving && true;
+    // Skills: use them when they clearly help.
+    const nearCount = (r) => this.enemies.filter((e) => dist(p.x, p.y, e.x, e.y) <= r).length
+      + (this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= r ? 1 : 0);
+    if (p.cooldowns.crescent <= 0 && p.energy >= SKILLS.crescent.cost && nearCount(SKILLS.crescent.range + 10) >= 2) {
+      this.castSkill('crescent');
+    }
+    if (p.cooldowns.ember <= 0 && p.energy >= SKILLS.ember.cost && (this.boss || nearCount(120) >= 2)) {
+      this.castSkill('ember');
+    }
+    if (p.cooldowns.glassguard <= 0 && p.energy >= SKILLS.glassguard.cost && p.hp < 50 && nearCount(70) >= 1) {
+      this.castSkill('glassguard');
+    }
+    if (p.cooldowns.starfall <= 0 && p.energy >= SKILLS.starfall.cost
+      && ((this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= SKILLS.starfall.range) || nearCount(SKILLS.starfall.range) >= 4)) {
+      this.castSkill('starfall');
     }
   }
 
-  renderTitle(g) {
-    // Bright Bloomroot backdrop: draw the first area's layer if we have one,
-    // otherwise a flat bright green with flowers.
-    const pal = AREAS[0];
-    g.fillStyle = pal.floor;
-    g.fillRect(0, 0, VIEW_W, VIEW_H);
-    g.fillStyle = pal.moss;
-    for (let i = 0; i < 40; i++) {
-      const x = (i * 137) % VIEW_W, y = (i * 89) % VIEW_H;
-      g.fillRect(x, y, 26, 18);
+  botIntermission() {
+    if (!this.offers.length) return;
+    const p = this.player;
+    const pref = ['charm', 'wick', 'hands', 'thread', 'cape'];
+    let pick = null;
+    if (p.hp < 60) {
+      pick = this.offers.find((o) => o.id === 'cape') || null;
     }
-    g.fillStyle = pal.flower;
-    for (let i = 0; i < 24; i++) {
-      const x = (i * 211 + 60) % VIEW_W, y = (i * 151 + 40) % VIEW_H;
-      g.fillRect(x, y, 10, 10);
-    }
-    // Neri standing in the entrance, with moth — v3: warm glow behind her.
-    const nx = VIEW_W / 2 - 120, ny = 430;
-    g.save();
-    g.globalCompositeOperation = 'lighter';
-    g.globalAlpha = 0.25;
-    g.fillStyle = '#FFC857';
-    g.beginPath(); g.arc(nx + 48, ny + 48, 90, 0, Math.PI * 2); g.fill();
-    g.restore();
-    g.drawImage(this.sprites.neri[0], nx, ny, 96, 96);
-    g.drawImage(this.sprites.lantern, nx + 66, ny + 40, 20, 28);
-    g.drawImage(this.sprites.moth[0], nx - 60, ny - 20, 48, 48);
+    if (!pick) pick = this.offers.find((o) => pref.includes(o.id) && pref.indexOf(o.id) === Math.min(...this.offers.map((x) => pref.indexOf(x.id))));
+    if (!pick) pick = this.offers[0];
+    if (pick) this.buyUpgrade(pick.id);
   }
 
-  // ---------------------------------------------------------- HUD (DOM)
-  updateHud() {
-    if (this.state === 'title') return;
+  // ---- HUD + minimap (DOM, kept from v3) ----
+  updateHUD() {
+    const $ = (id) => document.getElementById(id);
     const p = this.player;
     if (!p) return;
-    $('hpFill').style.width = `${(p.hp / p.maxHp) * 100}%`;
-    $('hpText').textContent = `HP ${Math.ceil(p.hp)} / ${p.maxHp}`;
-    $('hpBar').classList.toggle('low', p.hp <= FEEL.lowHp);
-    $('energyFill').style.width = `${(p.energy / HERO.maxEnergy) * 100}%`;
-    $('energyText').textContent = `${Math.floor(p.energy)} / ${HERO.maxEnergy}`;
-    $('waveText').textContent = `WAVE ${this.wave} / 8`;
-    const t = Math.max(0, this.waveT);
-    $('timerText').textContent = this.state === 'intermission' ? '—' : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
-    $('coinText').textContent = `${this.coins}  💠 ${this.shards}`;
-    $('areaText').textContent = AREAS[this.area].name;
-    // Boss bar.
-    const bossOn = this.state === 'playing' && this.boss && !this.boss.dead;
-    $('bossBar').classList.toggle('hidden', !bossOn);
-    if (bossOn) {
-      $('bossFill').style.width = `${(this.boss.hp / this.boss.maxHp) * 100}%`;
-      $('bossName').textContent = `${BOSS.name} — ${Math.ceil(this.boss.hp)} / ${this.boss.maxHp}`;
+    const hpBar = $('hpFill'), hpText = $('hpText');
+    if (hpBar) {
+      hpBar.style.width = `${(p.hp / p.maxHp) * 100}%`;
+      hpBar.classList.toggle('low', p.hp <= FEEL.lowHp);
     }
-    // Skill buttons: cooldown mask + energy affordability.
-    for (const s of SKILLS) {
-      const el = $('skill-' + s.id);
-      const cd = Math.max(0, p.cooldowns[s.id]);
-      el.querySelector('.cd').style.height = cd > 0 ? `${(cd / s.cooldown) * 100}%` : '0%';
-      el.classList.toggle('cant', p.energy < s.cost);
-      el.classList.toggle('ready', s.id === 'starfall' && p.energy >= s.cost && cd <= 0);
+    if (hpText) hpText.textContent = `HP ${Math.ceil(p.hp)} / ${p.maxHp}`;
+    const enBar = $('energyFill'), enText = $('energyText');
+    if (enBar) enBar.style.width = `${(p.energy / PLAYER.energyMax) * 100}%`;
+    if (enText) enText.textContent = `${Math.floor(p.energy)} / ${PLAYER.energyMax}`;
+    const waveEl = $('waveText');
+    if (waveEl) waveEl.textContent = `WAVE ${Math.max(1, this.wave)} / ${WAVE_COUNT}`;
+    const timerEl = $('timerText');
+    if (timerEl) {
+      const t = Math.max(0, this.state === 'intermission' ? this.interT : this.waveT);
+      timerEl.textContent = `0:${String(Math.floor(t)).padStart(2, '0')}`;
     }
-    if (this.state === 'intermission') {
-      $('interTimer').textContent = `Next wave in ${Math.ceil(this.interT)}s — pick an upgrade!`;
+    const areaEl = $('areaText');
+    if (areaEl) areaEl.textContent = AREA_NAMES[this.area];
+    const coinEl = $('coinCount');
+    if (coinEl) coinEl.textContent = String(this.coins);
+    const shardEl = $('shardCount');
+    if (shardEl) shardEl.textContent = String(this.shards);
+    const bossWrap = $('bossWrap');
+    if (bossWrap) {
+      bossWrap.style.display = this.boss && this.state === 'playing' ? 'block' : 'none';
+      if (this.boss) {
+        const bf = $('bossFill');
+        if (bf) bf.style.width = `${(this.boss.hp / this.boss.maxHp) * 100}%`;
+        const bt = $('bossText');
+        if (bt) bt.textContent = `${BOSS.name} — ${Math.max(0, Math.ceil(this.boss.hp))} / ${this.boss.maxHp}`;
+      }
     }
-    this.renderMinimap();
+    // Skill buttons: cooldown sweep + energy state.
+    for (const id of ['crescent', 'ember', 'glassguard', 'starfall']) {
+      const btn = document.getElementById(`skill-${id}`);
+      if (!btn) continue;
+      const cd = p.cooldowns[id] / SKILLS[id].cd;
+      btn.style.setProperty('--cd', String(cd));
+      btn.classList.toggle('ready', cd <= 0 && p.energy >= SKILLS[id].cost);
+      btn.classList.toggle('cooling', cd > 0);
+    }
+    const scoreEl = $('scoreText');
+    if (scoreEl) scoreEl.textContent = `Score ${this.score}`;
   }
 
-  renderMinimap() {
-    const c = $('minimap');
-    if (!c || !this.dungeon) return;
-    const g = c.getContext('2d');
-    const sx = c.width / WORLD_W, sy = c.height / WORLD_H;
-    g.clearRect(0, 0, c.width, c.height);
-    // v3: ROUND minimap like the reference images — terrain colours per
-    // area inside a clipped circle, bright dots, white-gold border.
-    g.save();
-    g.beginPath(); g.arc(c.width / 2, c.height / 2, c.width / 2 - 2, 0, Math.PI * 2); g.clip();
-    g.fillStyle = '#1A2438';
-    g.fillRect(0, 0, c.width, c.height);
-    for (const r of this.dungeon.rooms) {
-      g.fillStyle = AREAS[r.area].floor;
-      g.globalAlpha = 0.85;
-      g.fillRect(r.x * TILE * sx, r.y * TILE * sy, r.w * TILE * sx, r.h * TILE * sy);
+  drawMinimap() {
+    const cv = document.getElementById('minimap');
+    if (!cv) return;
+    const ctx = cv.getContext('2d');
+    const S = cv.width; // square canvas
+    const sx = S / WORLD_W, sy = S / WORLD_H;
+    ctx.clearRect(0, 0, S, S);
+    // Round clip.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.fillStyle = '#101018';
+    ctx.fillRect(0, 0, S, S);
+    const pal = AREAS[this.area];
+    for (let ty = 0; ty < GRID_H; ty++) {
+      for (let tx = 0; tx < GRID_W; tx++) {
+        if (!isFloor(this.dungeon, tx, ty)) continue;
+        ctx.fillStyle = pal.floor;
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(tx * TILE * sx, ty * TILE * sy, TILE * sx + 0.5, TILE * sy + 0.5);
+      }
     }
-    g.globalAlpha = 1;
+    ctx.globalAlpha = 1;
     for (const e of this.enemies) {
-      g.fillStyle = '#FF4040';
-      g.beginPath(); g.arc(e.x * sx, e.y * sy, 2.5, 0, Math.PI * 2); g.fill();
+      ctx.fillStyle = '#ff4f6a';
+      ctx.beginPath();
+      ctx.arc(e.x * sx, e.y * sy, 2.5, 0, Math.PI * 2);
+      ctx.fill();
     }
-    if (this.boss && !this.boss.dead) {
-      g.fillStyle = '#FFD76A';
-      g.beginPath(); g.arc(this.boss.x * sx, this.boss.y * sy, 4.5, 0, Math.PI * 2); g.fill();
+    if (this.boss) {
+      ctx.fillStyle = '#ffd76a';
+      ctx.beginPath();
+      ctx.arc(this.boss.x * sx, this.boss.y * sy, 4.5, 0, Math.PI * 2);
+      ctx.fill();
     }
-    g.fillStyle = '#FFFFFF';
-    g.strokeStyle = '#FFD76A'; g.lineWidth = 1.5;
-    g.beginPath(); g.arc(this.player.x * sx, this.player.y * sy, 3.5, 0, Math.PI * 2); g.fill(); g.stroke();
-    g.restore();
-    g.strokeStyle = 'rgba(255,255,255,0.9)';
-    g.lineWidth = 3;
-    g.beginPath(); g.arc(c.width / 2, c.height / 2, c.width / 2 - 2, 0, Math.PI * 2); g.stroke();
+    const p = this.player;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(p.x * sx, p.y * sy, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffd76a';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(p.x * sx, p.y * sy, 5.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---- panels (DOM) ----
+  showIntermission() {
+    const panel = document.getElementById('interPanel');
+    const row = document.getElementById('offerRow');
+    if (!panel || !row) return;
+    row.innerHTML = '';
+    for (const o of this.offers) {
+      const div = document.createElement('div');
+      div.className = 'offer';
+      div.innerHTML = `<b>${o.name}</b><span>${o.desc}</span><em>${o.cost} ${o.cur === 'coin' ? '🪙' : '💎'}</em>`;
+      div.onclick = () => { this.buyUpgrade(o.id); this.refreshOffers(); };
+      row.appendChild(div);
+    }
+    const skip = document.createElement('div');
+    skip.className = 'offer skip';
+    skip.innerHTML = '<b>Skip</b><span>save for later</span><em>—</em>';
+    skip.onclick = () => { this.hideIntermission(); };
+    row.appendChild(skip);
+    panel.style.display = 'block';
+  }
+
+  refreshOffers() {
+    this.showIntermission();
+  }
+
+  hideIntermission() {
+    const panel = document.getElementById('interPanel');
+    if (panel) panel.style.display = 'none';
+  }
+
+  showResult() {
+    const panel = document.getElementById('resultPanel');
+    if (!panel) return;
+    const title = document.getElementById('resultTitle');
+    const body = document.getElementById('resultBody');
+    if (title) title.textContent = this.done.result === 'victory' ? 'VICTORY' : 'DEFEAT';
+    if (body) {
+      body.innerHTML = `Score <b>${this.done.score}</b> &nbsp;·&nbsp; Best ${this.done.best}<br>` +
+        `Wave ${this.done.wave} / ${WAVE_COUNT} &nbsp;·&nbsp; ${this.done.kills} kills &nbsp;·&nbsp; ${this.done.time}s<br>` +
+        (this.done.result === 'victory'
+          ? 'You defeated the Gloam Bell and relit the dungeon!'
+          : 'The dungeon keeps its light… for now.');
+    }
+    panel.style.display = 'block';
+  }
+
+  hideResult() {
+    const panel = document.getElementById('resultPanel');
+    if (panel) panel.style.display = 'none';
+  }
+
+  // ---- shot conditions (screenshot hooks) ----
+  shotConditionMet() {
+    const shot = this.opts.shot;
+    if (!shot) return false;
+    if (shot === 'start') return this.state === 'title';
+    if (this.state !== 'playing') return false;
+    if (shot === 'combat') {
+      return this.wave >= 1 && this.wave <= 3 && this.enemies.length >= 8 && this.loot.length >= 1;
+    }
+    if (shot === 'cinder') {
+      return this.wave >= 4 && this.wave <= 6 && this.enemies.length >= 8;
+    }
+    if (shot === 'boss') {
+      if (this.wave !== 8 || !this.boss) return false;
+      if (this.boss.hp >= this.boss.maxHp * 0.5) return false;
+      if (this.player.y <= this.boss.y) return false; // Neri below the boss
+      return this.telegraphs.some((t) => t.owner === this.boss && t.kind === 'ring');
+    }
+    return false;
+  }
+
+  shotPreconditionMet() {
+    const shot = this.opts.shot;
+    if (!shot || shot === 'start') return true;
+    if (this.state !== 'playing') return false;
+    if (shot === 'combat') return this.wave >= 1 && this.wave <= 3 && this.enemies.length >= 6;
+    if (shot === 'cinder') return this.wave >= 4 && this.enemies.length >= 5;
+    if (shot === 'boss') return this.wave === 8 && this.boss && this.boss.hp < this.boss.maxHp * 0.62;
+    return false;
+  }
+
+  // If a shot run ends before its condition, restart on the next seed.
+  maybeRestartShot() {
+    if (!this.opts.shot || this.shotReady) return false;
+    if (this.done && this.shotSeedTries < 5) {
+      this.shotSeedTries++;
+      this.seed += 1;
+      this.buildRun();
+      this.state = 'playing';
+      this.startWave(1);
+      this.hideResult();
+      return true;
+    }
+    return false;
   }
 }

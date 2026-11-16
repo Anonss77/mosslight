@@ -1,416 +1,334 @@
-// Mosslight — dungeon generation. A 48x36 tile dungeon built with BSP:
-// the map is split into 12 leaves, one room per leaf, rooms joined by
-// L-shaped corridors (minimum spanning tree over room centres). The layout
-// is flood-fill checked for connectivity; a bad layout retries with the
+// Mosslight v4 — dungeon generation, from the design's section 7.
+// A 48x36 tile dungeon: the grid is divided into 6x4 BSP regions, one room
+// candidate per region; 12 rooms are kept (start room SW 9x8, boss room NE
+// 12x10); rooms join by L-shaped 3-tile corridors over a minimum spanning
+// tree of room centres; 2x2 cave patches roughen 4 rooms (4 cellular
+// automata passes, still walkable); chests sit in the first three rooms
+// from the start; one buff statue stands in a room of each area. The layout
+// is flood-fill checked from the start room; a bad layout retries with the
 // next seed value. All randomness comes from the run's seeded RNG, so the
-// same seed always builds the same dungeon.
+// same seed always builds the same dungeon. Rooms are tagged to an area by
+// distance from the start (nearest third Bloomroot, middle Cinderglass,
+// farthest Moonmilk) so waves spawn in their own area's rooms.
 
-import { DUN_W, DUN_H, TILE, WORLD_W, WORLD_H, SCALE, AREAS } from './config.js';
-import { Rng } from './random.js';
-import { FLOOR_VARIANTS, WALL_KIT, BORDER_COLOR, plainFloorHighlight, buildDecor, paintDecorStatic, cinderGlassShard } from './decor.js';
+import { GRID_W, GRID_H, TILE, WORLD_W, WORLD_H } from './config.js';
+import { makeRng } from './random.js';
 
-const WALL = 1;
-const FLOOR = 0;
+const WALL = 0;
+const FLOOR = 1;
 
-// Simple FNV-1a hash of the tile grid (determinism summary).
-function hashTiles(tiles) {
+// FNV-1a hash of the tile grid (determinism summary).
+export function hashTiles(tiles) {
   let h = 0x811c9dc5;
   for (let i = 0; i < tiles.length; i++) {
     h ^= tiles[i];
     h = Math.imul(h, 0x01000193);
   }
-  return (h >>> 0).toString(16);
+  return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-export class Dungeon {
-  constructor(seed) {
-    this.seed = seed;
-    this.rng = new Rng(seed);
-    this.build();
+function carveRoom(grid, room) {
+  for (let y = room.y; y < room.y + room.h; y++) {
+    for (let x = room.x; x < room.x + room.w; x++) grid[y * GRID_W + x] = FLOOR;
   }
+}
 
-  build() {
-    // Retry loop: a layout that fails the flood-fill check rebuilds with
-    // the next seed value (still deterministic for a given start seed).
-    let tries = 0;
-    while (true) {
-      const rng = new Rng(this.seed + tries * 7919);
-      const d = this.tryBuild(rng);
-      if (d) { Object.assign(this, d); this.tries = tries; return; }
-      tries++;
-      if (tries > 50) throw new Error('dungeon: no connected layout found');
+// L-shaped corridor, 3 tiles wide, from (x0,y0) to (x1,y1).
+function carveCorridor(grid, x0, y0, x1, y1, rng) {
+  const horizontalFirst = rng.chance(0.5);
+  const carveH = (y, xa, xb) => {
+    for (let x = Math.min(xa, xb); x <= Math.max(xa, xb); x++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy > 0 && yy < GRID_H - 1 && x > 0 && x < GRID_W - 1) grid[yy * GRID_W + x] = FLOOR;
+      }
+    }
+  };
+  const carveV = (x, ya, yb) => {
+    for (let y = Math.min(ya, yb); y <= Math.max(ya, yb); y++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx;
+        if (xx > 0 && xx < GRID_W - 1 && y > 0 && y < GRID_H - 1) grid[y * GRID_W + xx] = FLOOR;
+      }
+    }
+  };
+  if (horizontalFirst) { carveH(y0, x0, x1); carveV(x1, y0, y1); }
+  else { carveV(x0, y0, y1); carveH(y1, x0, x1); }
+}
+
+// Roughen a 2x2 patch inside a room with 4 cellular-automata passes.
+// The patch stays walkable floor; the passes only vary its edge tiles.
+function carveCavePatch(grid, room, rng) {
+  const px = room.x + 1 + rng.int(0, Math.max(0, room.w - 4));
+  const py = room.y + 1 + rng.int(0, Math.max(0, room.h - 4));
+  // 4x4 neighbourhood, 4 passes of "a wall tile with >=5 floor neighbours becomes floor".
+  for (let pass = 0; pass < 4; pass++) {
+    for (let y = py; y < py + 4; y++) {
+      for (let x = px; x < px + 4; x++) {
+        if (x < 1 || y < 1 || x >= GRID_W - 1 || y >= GRID_H - 1) continue;
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          if (grid[(y + dy) * GRID_W + (x + dx)] === FLOOR) n++;
+        }
+        if (n >= 5) grid[y * GRID_W + x] = FLOOR;
+      }
     }
   }
+  // The 2x2 core is always floor.
+  for (let y = py + 1; y < py + 3; y++) for (let x = px + 1; x < px + 3; x++) grid[y * GRID_W + x] = FLOOR;
+  return { x: px + 1, y: py + 1 };
+}
 
-  tryBuild(rng) {
-    const tiles = new Uint8Array(DUN_W * DUN_H).fill(WALL);
-    const at = (x, y) => tiles[y * DUN_W + x];
-    const set = (x, y, v) => { tiles[y * DUN_W + x] = v; };
+function floodFillCount(grid, sx, sy) {
+  const seen = new Uint8Array(GRID_W * GRID_H);
+  const stack = [[sx, sy]];
+  seen[sy * GRID_W + sx] = 1;
+  let count = 0;
+  while (stack.length) {
+    const [x, y] = stack.pop();
+    count++;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= GRID_W || ny >= GRID_H) continue;
+      if (seen[ny * GRID_W + nx] || grid[ny * GRID_W + nx] !== FLOOR) continue;
+      seen[ny * GRID_W + nx] = 1;
+      stack.push([nx, ny]);
+    }
+  }
+  return { count, seen };
+}
 
-    // --- BSP: split the map into 12 leaves.
-    const leaves = [{ x: 1, y: 1, w: DUN_W - 2, h: DUN_H - 2 }];
-    while (leaves.length < 12) {
-      // Split the largest leaf.
-      let bi = 0;
-      for (let i = 1; i < leaves.length; i++) {
-        if (leaves[i].w * leaves[i].h > leaves[bi].w * leaves[bi].h) bi = i;
-      }
-      const leaf = leaves.splice(bi, 1)[0];
-      const vertical = leaf.w > leaf.h ? true : leaf.h > leaf.w ? false : rng.chance(0.5);
-      if (vertical && leaf.w >= 12) {
-        const cut = rng.int(6, leaf.w - 5);
-        leaves.push({ x: leaf.x, y: leaf.y, w: cut, h: leaf.h });
-        leaves.push({ x: leaf.x + cut, y: leaf.y, w: leaf.w - cut, h: leaf.h });
-      } else if (!vertical && leaf.h >= 12) {
-        const cut = rng.int(6, leaf.h - 5);
-        leaves.push({ x: leaf.x, y: leaf.y, w: leaf.w, h: cut });
-        leaves.push({ x: leaf.x, y: leaf.y + cut, w: leaf.w, h: leaf.h - cut });
+// Build one candidate layout from a seed. Returns null when it fails the
+// connectivity check (caller retries with the next seed).
+function buildLayout(seed) {
+  const rng = makeRng(seed);
+  const grid = new Uint8Array(GRID_W * GRID_H); // all wall
+  // 6x4 regions; each region is 8 wide x 9 tall.
+  const regionW = Math.floor(GRID_W / 6);
+  const regionH = Math.floor(GRID_H / 4);
+  const candidates = [];
+  for (let ry = 0; ry < 4; ry++) {
+    for (let rx = 0; rx < 6; rx++) {
+      const x0 = rx * regionW, y0 = ry * regionH;
+      // Split the region once (vertical or horizontal) and place the room
+      // inside one half, keeping at least 1 tile of wall around it.
+      const vertical = rng.chance(0.5);
+      let bx, by, bw, bh;
+      if (vertical) {
+        const cut = x0 + 2 + rng.int(0, regionW - 4);
+        const left = rng.chance(0.5);
+        bx = left ? x0 + 1 : cut + 1;
+        bw = left ? cut - x0 - 1 : x0 + regionW - cut - 2;
+        by = y0 + 1; bh = regionH - 2;
       } else {
-        leaves.push(leaf);
-        break; // cannot split further; accept fewer leaves
+        const cut = y0 + 2 + rng.int(0, regionH - 4);
+        const top = rng.chance(0.5);
+        by = top ? y0 + 1 : cut + 1;
+        bh = top ? cut - y0 - 1 : y0 + regionH - cut - 2;
+        bx = x0 + 1; bw = regionW - 2;
+      }
+      const w = Math.max(3, Math.min(9, bw));
+      const h = Math.max(3, Math.min(8, bh));
+      const x = bx + rng.int(0, Math.max(0, bw - w));
+      const y = by + rng.int(0, Math.max(0, bh - h));
+      candidates.push({ x, y, w, h, region: ry * 6 + rx });
+    }
+  }
+  // The start room is the SW region (bottom-left, region 18) sized 9x8;
+  // the boss room is the NE region (top-right, region 5) sized 12x10.
+  const startRegion = 18, bossRegion = 5;
+  const startCand = candidates[startRegion];
+  const bossCand = candidates[bossRegion];
+  startCand.w = 9; startCand.h = 8;
+  startCand.x = Math.min(startCand.x, GRID_W - 10);
+  startCand.y = Math.min(startCand.y, GRID_H - 9);
+  bossCand.w = 12; bossCand.h = 10;
+  bossCand.x = Math.min(bossCand.x, GRID_W - 13);
+  bossCand.y = Math.min(bossCand.y, GRID_H - 11);
+  // Keep 12 rooms: start + boss + 10 more, shuffled by the seed.
+  const rest = candidates.filter((c) => c.region !== startRegion && c.region !== bossRegion);
+  rng.shuffle(rest);
+  const rooms = [startCand, bossCand, ...rest.slice(0, 10)];
+  // Clamp rooms to 5-9 wide / 5-8 high (except start/boss, already sized),
+  // and keep at least 1 tile of wall between neighbours by construction.
+  for (const r of rooms) {
+    if (r !== startCand && r !== bossCand) {
+      r.w = Math.max(5, Math.min(9, r.w));
+      r.h = Math.max(5, Math.min(8, r.h));
+    }
+    r.cx = r.x + Math.floor(r.w / 2);
+    r.cy = r.y + Math.floor(r.h / 2);
+  }
+  for (const r of rooms) carveRoom(grid, r);
+  // Connect rooms: minimum spanning tree over room centres, L corridors.
+  const connected = new Set([0]);
+  const edges = [];
+  while (connected.size < rooms.length) {
+    let best = null;
+    for (const i of connected) {
+      for (let j = 0; j < rooms.length; j++) {
+        if (connected.has(j)) continue;
+        const d = Math.abs(rooms[i].cx - rooms[j].cx) + Math.abs(rooms[i].cy - rooms[j].cy);
+        if (!best || d < best.d) best = { i, j, d };
       }
     }
-
-    // --- One room per leaf, inset by at least 1 tile.
-    const rooms = [];
-    for (const leaf of leaves) {
-      const rw = Math.min(rng.int(5, 10), leaf.w - 2);
-      const rh = Math.min(rng.int(5, 9), leaf.h - 2);
-      if (rw < 4 || rh < 4) continue;
-      const rx = leaf.x + rng.int(1, Math.max(2, leaf.w - rw));
-      const ry = leaf.y + rng.int(1, Math.max(2, leaf.h - rh));
-      const room = { x: rx, y: ry, w: rw, h: rh, cx: rx + (rw >> 1), cy: ry + (rh >> 1) };
-      rooms.push(room);
-      for (let y = ry; y < ry + rh; y++) for (let x = rx; x < rx + rw; x++) set(x, y, FLOOR);
-    }
-    if (rooms.length < 8) return null;
-
-    // --- Start room (southwest: low x, high y) and boss room (northeast).
-    let start = rooms[0], boss = rooms[0];
-    for (const r of rooms) {
-      if (r.cx - r.cy < start.cx - start.cy) start = r;
-      if (r.cx - r.cy > boss.cx - boss.cy) boss = r;
-    }
-    start.w = Math.max(start.w, 9); start.h = Math.max(start.h, 8);
-    boss.w = Math.max(boss.w, 12); boss.h = Math.max(boss.h, 10);
-    // Re-carve the enlarged rooms (they may overlap walls).
-    const carve = (r) => { for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (x > 0 && y > 0 && x < DUN_W - 1 && y < DUN_H - 1) set(x, y, FLOOR); };
-    carve(start); carve(boss);
-    start.cx = start.x + (start.w >> 1); start.cy = start.y + (start.h >> 1);
-    boss.cx = boss.x + (boss.w >> 1); boss.cy = boss.y + (boss.h >> 1);
-
-    // --- Connect rooms: minimum spanning tree over centres, L corridors.
-    const connected = [rooms[0]];
-    const rest = rooms.slice(1);
-    const corridor = (ax, ay, bx, by) => {
-      const carveH = (x0, x1, y) => { for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) for (let dy = -1; dy <= 1; dy++) if (y + dy > 0 && y + dy < DUN_H - 1 && x > 0 && x < DUN_W - 1) set(x, y + dy, FLOOR); };
-      const carveV = (y0, y1, x) => { for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) for (let dx = -1; dx <= 1; dx++) if (x + dx > 0 && x + dx < DUN_W - 1 && y > 0 && y < DUN_H - 1) set(x + dx, y, FLOOR); };
-      if (rng.chance(0.5)) { carveH(ax, bx, ay); carveV(ay, by, bx); }
-      else { carveV(ay, by, ax); carveH(ax, bx, by); }
-    };
-    while (rest.length) {
-      let best = null, bestD = Infinity, bestFrom = null;
-      for (const r of rest) for (const c of connected) {
-        const d = (r.cx - c.cx) ** 2 + (r.cy - c.cy) ** 2;
-        if (d < bestD) { bestD = d; best = r; bestFrom = c; }
-      }
-      corridor(bestFrom.cx, bestFrom.cy, best.cx, best.cy);
-      connected.push(best);
-      rest.splice(rest.indexOf(best), 1);
-    }
-
-    // --- Cave patches: 4 random rooms get a blobby moss patch (walkable).
-    const caveRooms = rng.shuffle(rooms.slice()).slice(0, 4);
-    const caveTiles = new Set();
-    for (const room of caveRooms) {
-      let cx = room.x + rng.int(1, room.w - 1);
-      let cy = room.y + rng.int(1, room.h - 1);
-      for (let i = 0; i < 10; i++) {
-        caveTiles.add(cy * DUN_W + cx);
-        cx += rng.int(-1, 2); cy += rng.int(-1, 2);
-        cx = Math.max(room.x, Math.min(room.x + room.w - 1, cx));
-        cy = Math.max(room.y, Math.min(room.y + room.h - 1, cy));
-      }
-    }
-
-    // --- Flood-fill connectivity from the start room centre.
-    const seen = new Uint8Array(DUN_W * DUN_H);
-    const stack = [[start.cx, start.cy]];
-    seen[start.cy * DUN_W + start.cx] = 1;
-    while (stack.length) {
-      const [x, y] = stack.pop();
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= DUN_W || ny >= DUN_H) continue;
-        if (at(nx, ny) !== FLOOR || seen[ny * DUN_W + nx]) continue;
-        seen[ny * DUN_W + nx] = 1;
-        stack.push([nx, ny]);
-      }
-    }
-    for (const r of rooms) {
-      if (!seen[r.cy * DUN_W + r.cx]) return null;
-    }
-
-    // --- Area assignment: rooms sorted by distance from start, in thirds.
-    const byDist = rooms.slice().sort((a, b) => {
-      const da = (a.cx - start.cx) ** 2 + (a.cy - start.cy) ** 2;
-      const db = (b.cx - start.cx) ** 2 + (b.cy - start.cy) ** 2;
-      return da - db;
+    edges.push([best.i, best.j]);
+    connected.add(best.j);
+  }
+  for (const [i, j] of edges) carveCorridor(grid, rooms[i].cx, rooms[i].cy, rooms[j].cx, rooms[j].cy, rng);
+  // Cave patches in 4 rooms.
+  const caveRooms = rng.shuffle([...rooms]).slice(0, 4);
+  const caves = caveRooms.map((r) => carveCavePatch(grid, r, rng));
+  // Tag rooms to areas by distance from the start room centre.
+  const sx = rooms[0].cx, sy = rooms[0].cy;
+  const withDist = rooms.map((r) => ({ r, d: Math.abs(r.cx - sx) + Math.abs(r.cy - sy) }));
+  withDist.sort((a, b) => a.d - b.d);
+  withDist.forEach((entry, idx) => {
+    entry.r.area = idx < 4 ? 0 : idx < 8 ? 1 : 2;
+    entry.r.id = idx;
+  });
+  rooms[0].area = 0; // start room is always Bloomroot
+  rooms[1].area = 2; // boss room is always Moonmilk
+  // Connectivity: every room centre reachable from the start centre.
+  const { seen } = floodFillCount(grid, rooms[0].cx, rooms[0].cy);
+  for (const r of rooms) {
+    if (!seen[r.cy * GRID_W + r.cx]) return null;
+  }
+  // Chests: one in each of the first three rooms from the start (BFS order),
+  // excluding the start room itself.
+  const order = [...rooms].sort((a, b) => (Math.abs(a.cx - sx) + Math.abs(a.cy - sy)) - (Math.abs(b.cx - sx) + Math.abs(b.cy - sy)));
+  const chests = [];
+  for (const r of order.slice(1, 4)) {
+    chests.push({
+      x: (r.x + 1 + rng.int(0, Math.max(0, r.w - 3))) * TILE + TILE / 2,
+      y: (r.y + 1 + rng.int(0, Math.max(0, r.h - 3))) * TILE + TILE / 2,
+      room: r,
     });
-    const third = Math.ceil(rooms.length / 3);
-    byDist.forEach((r, i) => { r.area = i < third ? 0 : i < third * 2 ? 1 : 2; });
-    start.area = 0; boss.area = 2;
-
-    // --- Chests: first three rooms from the start (excluding start).
-    const chests = byDist.slice(1, 4).map((r) => ({
-      x: (r.cx + 0.5) * TILE, y: (r.cy + 0.5) * TILE,
-      coins: rng.int(4, 9), opened: false,
-    }));
-    // --- Buff statues: one per area, in a non-start, non-boss room.
-    const statues = [];
-    for (let a = 0; a < 3; a++) {
-      const cands = rooms.filter((r) => r.area === a && r !== start && r !== boss);
-      if (!cands.length) continue;
-      const r = rng.pick(cands);
-      statues.push({ x: (r.cx + 0.5) * TILE, y: (r.cy + 0.5) * TILE, used: false, area: a });
-    }
-
-    return { tiles, rooms, start, boss, chests, statues, caveTiles, hash: hashTiles(tiles), rng };
   }
-
-  isWallPx(wx, wy) {
-    const tx = Math.floor(wx / TILE), ty = Math.floor(wy / TILE);
-    if (tx < 0 || ty < 0 || tx >= DUN_W || ty >= DUN_H) return true;
-    return this.tiles[ty * DUN_W + tx] === WALL;
+  // Statues: one per area, in a non-start, non-boss room of that area.
+  const statues = [];
+  for (let area = 0; area < 3; area++) {
+    const pool = rooms.filter((r) => r.area === area && r !== rooms[0] && r !== rooms[1]);
+    if (!pool.length) continue;
+    const r = rng.pick(pool);
+    statues.push({
+      x: (r.x + 1 + rng.int(0, Math.max(0, r.w - 3))) * TILE + TILE / 2,
+      y: (r.y + 1 + rng.int(0, Math.max(0, r.h - 3))) * TILE + TILE / 2,
+      room: r, area, used: false,
+    });
   }
+  return { grid, rooms, startRoom: rooms[0], bossRoom: rooms[1], chests, statues, caves, seed };
+}
 
-  // Line of sight: true when no wall tile lies on the segment (sampled
-  // every 8px). Projectiles die on walls, so a bolt fired without line of
-  // sight never reaches its target.
-  hasLineOfSight(x1, y1, x2, y2) {
-    const dx = x2 - x1, dy = y2 - y1;
-    const dist = Math.hypot(dx, dy);
-    const steps = Math.max(1, Math.ceil(dist / 8));
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      if (this.isWallPx(x1 + dx * t, y1 + dy * t)) return false;
-    }
-    return true;
+// Public: generate a dungeon for a seed, retrying on failed layouts.
+export function generateDungeon(seed) {
+  for (let attempt = 0; attempt < 64; attempt++) {
+    const layout = buildLayout(seed + attempt);
+    if (layout) return layout;
   }
+  throw new Error('dungeon: no connected layout in 64 attempts');
+}
 
-  // Circle (x, y, r) vs wall tiles: true if the circle overlaps a wall.
-  hitsWall(x, y, r) {
-    const x0 = Math.floor((x - r) / TILE), x1 = Math.floor((x + r) / TILE);
-    const y0 = Math.floor((y - r) / TILE), y1 = Math.floor((y + r) / TILE);
-    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
-      if (tx < 0 || ty < 0 || tx >= DUN_W || ty >= DUN_H) return true;
-      if (this.tiles[ty * DUN_W + tx] === WALL) {
+// ---- queries over a built dungeon ----
+
+export function tileAt(d, tx, ty) {
+  if (tx < 0 || ty < 0 || tx >= GRID_W || ty >= GRID_H) return WALL;
+  return d.grid[ty * GRID_W + tx];
+}
+
+export function isFloor(d, tx, ty) {
+  return tileAt(d, tx, ty) === FLOOR;
+}
+
+// Can a circle of radius r (px) sit at (x, y) without touching a wall?
+export function circleFits(d, x, y, r) {
+  const x0 = Math.floor((x - r) / TILE), x1 = Math.floor((x + r) / TILE);
+  const y0 = Math.floor((y - r) / TILE), y1 = Math.floor((y + r) / TILE);
+  for (let ty = y0; ty <= y1; ty++) {
+    for (let tx = x0; tx <= x1; tx++) {
+      if (tileAt(d, tx, ty) === WALL) {
         // Closest point on the tile to the circle centre.
         const cx = Math.max(tx * TILE, Math.min(x, tx * TILE + TILE));
         const cy = Math.max(ty * TILE, Math.min(y, ty * TILE + TILE));
-        if ((x - cx) ** 2 + (y - cy) ** 2 < r * r) return true;
+        const dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy < r * r) return false;
       }
     }
-    return false;
   }
-
-  // BFS path on the tile grid (floor tiles only). Returns an array of
-  // world-space waypoints (tile centres) from (x0,y0) to (x1,y1), or null
-  // when unreachable. The grid is tiny (48x36), so this is cheap.
-  findPath(x0, y0, x1, y1) {
-    const sx = Math.floor(x0 / TILE), sy = Math.floor(y0 / TILE);
-    const tx = Math.floor(x1 / TILE), ty = Math.floor(y1 / TILE);
-    if (sx === tx && sy === ty) return [];
-    const start = sy * DUN_W + sx, target = ty * DUN_W + tx;
-    if (this.tiles[target] === WALL) return null;
-    const prev = new Int16Array(DUN_W * DUN_H).fill(-1);
-    prev[start] = start;
-    const q = [start];
-    let head = 0;
-    while (head < q.length) {
-      const cur = q[head++];
-      if (cur === target) break;
-      const cx = cur % DUN_W, cy = (cur / DUN_W) | 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = cx + dx, ny = cy + dy;
-        if (nx < 0 || ny < 0 || nx >= DUN_W || ny >= DUN_H) continue;
-        const ni = ny * DUN_W + nx;
-        if (prev[ni] !== -1 || this.tiles[ni] === WALL) continue;
-        prev[ni] = cur;
-        q.push(ni);
-      }
-    }
-    if (prev[target] === -1) return null;
-    const path = [];
-    let cur = target;
-    while (cur !== start) {
-      path.push({ x: (cur % DUN_W + 0.5) * TILE, y: (((cur / DUN_W) | 0) + 0.5) * TILE });
-      cur = prev[cur];
-    }
-    path.reverse();
-    return path;
-  }
-
-  // Random spawn point in a room of the given area, at least minDist from (px, py).
-  // Biases toward the NEAREST qualifying room so the action stays near the player.
-  spawnPoint(area, px, py, minDist) {
-    const rng = this.rng;
-    const rooms = this.rooms.filter((r) => r.area === area);
-    const pool = rooms.length ? rooms : this.rooms;
-    let best = null, bestD = Infinity;
-    for (let i = 0; i < 8; i++) {
-      const r = rng.pick(pool);
-      const x = (r.x + 1 + rng.float() * (r.w - 2)) * TILE;
-      const y = (r.y + 1 + rng.float() * (r.h - 2)) * TILE;
-      const d = (x - px) ** 2 + (y - py) ** 2;
-      if (d >= minDist * minDist && d < bestD) { bestD = d; best = { x, y }; }
-    }
-    if (best) return best;
-    // Fallback: anywhere in the boss room's far corner.
-    return { x: (this.boss.cx + 0.5) * TILE, y: (this.boss.cy + 0.5) * TILE };
-  }
-
-  playerStart() {
-    return { x: (this.start.cx + 0.5) * TILE, y: (this.start.cy + 0.5) * TILE };
-  }
-
-  bossStart() {
-    return { x: (this.boss.cx + 0.5) * TILE, y: (this.boss.cy + 0.5) * TILE };
-  }
-
-  // Boss spawn near the player: a point ~200px along the BFS path from
-  // the player toward the boss room, so the final fight starts as a duel,
-  // not a maze chase. The boss room is far from where the player usually
-  // ends wave 7, and a 50s boss timer does not leave room for both sides
-  // to cross the dungeon before the fight even starts. The path is all
-  // floor, so the point is always valid and reachable. Falls back to the
-  // boss room when the path is too short to walk 200px along.
-  bossSpawnNear(px, py) {
-    const path = this.findPath(px, py, (this.boss.cx + 0.5) * TILE, (this.boss.cy + 0.5) * TILE);
-    if (path && path.length > 1) {
-      let dist = 0, prev = { x: px, y: py };
-      for (const node of path) {
-        dist += Math.hypot(node.x - prev.x, node.y - prev.y);
-        if (dist >= 200) return { x: node.x, y: node.y };
-        prev = node;
-      }
-    }
-    return this.bossStart();
-  }
-
-  summary() {
-    return {
-      seed: this.seed, tries: this.tries, hash: this.hash,
-      rooms: this.rooms.map((r) => [r.x, r.y, r.w, r.h, r.area]),
-      chests: this.chests.map((c) => [Math.round(c.x), Math.round(c.y), c.coins]),
-      statues: this.statues.map((s) => [Math.round(s.x), Math.round(s.y), s.area]),
-    };
-  }
+  return true;
 }
 
-// Bake one area's static layer (floors, walls, decor) to an offscreen
-// canvas at SCALE, so each frame only blits it. All variation uses a
-// dedicated seeded stream (dungeon.seed*31 + areaIdx*101) — never the run
-// RNG, never Math.random — so the same seed dresses the same dungeon.
-// Bake order (Astra §2): floor -> variants -> walls -> growths/cracks
-// -> large props -> small props/flecks -> depth shading.
-export function bakeLayer(dungeon, areaIdx) {
-  const pal = AREAS[areaIdx];
-  const kit = WALL_KIT[areaIdx];
-  const c = document.createElement('canvas');
-  c.width = WORLD_W * SCALE; c.height = WORLD_H * SCALE;
-  const g = c.getContext('2d');
-  const rng = new Rng(dungeon.seed * 31 + areaIdx * 101);
-  g.imageSmoothingEnabled = false;
-  const decor = buildDecor(dungeon);
-  dungeon.decor = decor; // placement is area-independent; only the skin changes
-  const variants = FLOOR_VARIANTS[areaIdx];
-  const spawn = dungeon.playerStart();
+// Move a circle by (dx, dy) with axis separation so it slides along walls.
+export function moveCircle(d, x, y, r, dx, dy) {
+  if (circleFits(d, x + dx, y, r)) x += dx;
+  if (circleFits(d, x, y + dy, r)) y += dy;
+  return { x, y };
+}
 
-  for (let ty = 0; ty < DUN_H; ty++) {
-    for (let tx = 0; tx < DUN_W; tx++) {
-      const t = dungeon.tiles[ty * DUN_W + tx];
-      const px = tx * TILE * SCALE, py = ty * TILE * SCALE, s = TILE * SCALE;
-      const wx = tx * TILE, wy = ty * TILE;
-      if (t === WALL) {
-        g.fillStyle = kit.face;
-        g.fillRect(px, py, s, s);
-        const floorBelow = ty + 1 < DUN_H && dungeon.tiles[(ty + 1) * DUN_W + tx] === FLOOR;
-        if (floorBelow) {
-          // Visible face: 3px bright top strip, 4px dark lower strip.
-          g.fillStyle = kit.top;
-          g.fillRect(px, py + s - 12, s, 6);
-          g.fillStyle = kit.low;
-          g.fillRect(px, py + s - 8, s, 8);
-          kit.growth(g, wx, wy + 2, rng);
-          kit.crack(g, wx, wy + 2, rng);
-          if (kit.rust) kit.rust(g, wx, wy + 2, rng);
-          if (kit.rivet) kit.rivet(g, wx, wy + 2, rng);
-          if (kit.deposit) kit.deposit(g, wx, wy + 2, rng);
-        }
-        // Side shade where a wall meets floor on its west/south side.
-        if (tx > 0 && dungeon.tiles[ty * DUN_W + tx - 1] === FLOOR) {
-          g.fillStyle = kit.sideW || kit.side;
-          g.fillRect(px, py, 4, s);
-        }
-        if (floorBelow) {
-          g.fillStyle = kit.sideS || kit.side;
-          g.fillRect(px, py + s - 4, s, 4);
-        }
-        // Corner treatment: wall with floor on two sides.
-        const floorL = tx > 0 && dungeon.tiles[ty * DUN_W + tx - 1] === FLOOR;
-        const floorR = tx + 1 < DUN_W && dungeon.tiles[ty * DUN_W + tx + 1] === FLOOR;
-        if (floorBelow && (floorL || floorR) && kit.corner) kit.corner(g, wx, wy);
-        g.fillStyle = pal.outline;
-        g.fillRect(px, py, s, 2);
-      } else {
-        const cave = dungeon.caveTiles.has(ty * DUN_W + tx);
-        g.fillStyle = cave ? pal.moss : pal.floor;
-        g.fillRect(px, py, s, s);
-        // One seeded variant roll per floor tile.
-        const roll = rng.float();
-        let painted = false;
-        for (const v of variants) {
-          if (roll < v.upto) {
-            // Cyan glass shards never appear within 6px of Neri's spawn.
-            if (v.paint === cinderGlassShard) {
-              const dx = wx + 8 - spawn.x, dy = wy + 8 - spawn.y;
-              if (dx * dx + dy * dy < 24 * 24) break;
-            }
-            v.paint(g, wx, wy, rng);
-            painted = true;
-            break;
-          }
-        }
-        if (!painted) plainFloorHighlight(g, wx, wy, areaIdx, rng);
-      }
+// BFS path (tile centres in px) from (sx, sy) to (tx, ty). Empty when unreachable.
+export function findPath(d, sx, sy, tx, ty) {
+  const startX = Math.floor(sx / TILE), startY = Math.floor(sy / TILE);
+  const goalX = Math.floor(tx / TILE), goalY = Math.floor(ty / TILE);
+  if (!isFloor(d, goalX, goalY)) return [];
+  const prev = new Int32Array(GRID_W * GRID_H).fill(-1);
+  const queue = [startY * GRID_W + startX];
+  prev[startY * GRID_W + startX] = startY * GRID_W + startX;
+  let head = 0;
+  while (head < queue.length) {
+    const cur = queue[head++];
+    const cx = cur % GRID_W, cy = Math.floor(cur / GRID_W);
+    if (cx === goalX && cy === goalY) break;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (!isFloor(d, nx, ny)) continue;
+      const ni = ny * GRID_W + nx;
+      if (prev[ni] !== -1) continue;
+      prev[ni] = cur;
+      queue.push(ni);
     }
   }
-  // Wall-border depth: 2px border on floor tiles adjacent to walls.
-  const [borderCol, borderA] = BORDER_COLOR[areaIdx];
-  g.globalAlpha = borderA;
-  g.fillStyle = borderCol;
-  for (let ty = 0; ty < DUN_H; ty++) {
-    for (let tx = 0; tx < DUN_W; tx++) {
-      if (dungeon.tiles[ty * DUN_W + tx] !== FLOOR) continue;
-      const px = tx * TILE * SCALE, py = ty * TILE * SCALE, s = TILE * SCALE;
-      if (ty > 0 && dungeon.tiles[(ty - 1) * DUN_W + tx] === WALL) g.fillRect(px, py, s, 4);
-      if (tx > 0 && dungeon.tiles[ty * DUN_W + tx - 1] === WALL) g.fillRect(px, py, 4, s);
+  const goal = goalY * GRID_W + goalX;
+  if (prev[goal] === -1) return [];
+  const path = [];
+  let cur = goal;
+  while (cur !== startY * GRID_W + startX) {
+    path.push({ x: (cur % GRID_W) * TILE + TILE / 2, y: Math.floor(cur / GRID_W) * TILE + TILE / 2 });
+    cur = prev[cur];
+  }
+  path.reverse();
+  return path;
+}
+
+// A random floor point inside a room (px).
+export function randomPointInRoom(rng, room, margin = 1) {
+  const tx = room.x + margin + rng.int(0, Math.max(0, room.w - 1 - margin * 2));
+  const ty = room.y + margin + rng.int(0, Math.max(0, room.h - 1 - margin * 2));
+  return { x: tx * TILE + TILE / 2, y: ty * TILE + TILE / 2 };
+}
+
+// Spawn point: a floor point in one of the current area's rooms, at least
+// minDist px from the player, near a room edge when possible.
+export function spawnPoint(d, rng, px, py, area, minDist) {
+  const pool = d.rooms.filter((r) => r.area === area);
+  const shuffled = rng.shuffle([...pool]);
+  for (const room of shuffled) {
+    for (let tries = 0; tries < 12; tries++) {
+      const p = randomPointInRoom(rng, room, 0);
+      const dx = p.x - px, dy = p.y - py;
+      if (dx * dx + dy * dy >= minDist * minDist) return p;
     }
   }
-  g.globalAlpha = 1;
-  // Static decor (large -> small -> foreground tufts), baked once.
-  paintDecorStatic(g, dungeon, areaIdx, decor);
-  // Soft outline where floor meets wall (readability).
-  g.strokeStyle = pal.outline;
-  g.lineWidth = 2;
-  for (let ty = 0; ty < DUN_H; ty++) {
-    for (let tx = 0; tx < DUN_W; tx++) {
-      if (dungeon.tiles[ty * DUN_W + tx] !== FLOOR) continue;
-      const px = tx * TILE * SCALE, py = ty * TILE * SCALE, s = TILE * SCALE;
-      if (ty > 0 && dungeon.tiles[(ty - 1) * DUN_W + tx] === WALL) { g.beginPath(); g.moveTo(px, py + 1); g.lineTo(px + s, py + 1); g.stroke(); }
-      if (tx > 0 && dungeon.tiles[ty * DUN_W + tx - 1] === WALL) { g.beginPath(); g.moveTo(px + 1, py); g.lineTo(px + 1, py + s); g.stroke(); }
-    }
+  // Fallback: any room, any distance.
+  const room = rng.pick(d.rooms);
+  return randomPointInRoom(rng, room, 0);
+}
+
+// The room containing a px point (or null).
+export function roomAt(d, x, y) {
+  const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+  for (const r of d.rooms) {
+    if (tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h) return r;
   }
-  return c;
+  return null;
 }
