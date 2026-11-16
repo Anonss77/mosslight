@@ -1,9 +1,5 @@
-// Mosslight v4 — input. Keyboard (WASD/arrows move, J/K/L/Space skills,
-// Escape pause) plus touch: a virtual joystick and round skill buttons.
-// Writes the three channels game.js reads every step:
-//   window.__keys      — a Set of KeyboardEvent.code values ('KeyW', ...)
-//   window.__joy       — { x, y } in -1..1 from the joystick
-//   window.__castQueue — skill ids pressed since the last step
+// Mosslight — input. Keyboard (WASD/arrows, Q/E/R/F + J/K/L/Space skills,
+// B bag, Esc pause) + touch joystick + skill buttons.
 
 export class Input {
   constructor() {
@@ -12,6 +8,7 @@ export class Input {
     if (!window.__castQueue) window.__castQueue = [];
     this.joy = { active: false, id: -1 };
     this.onPause = null; // main.js sets this
+    this.onBag = null; // main.js sets this (B opens the backpack)
     this.bindKeyboard();
   }
 
@@ -20,10 +17,12 @@ export class Input {
       if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
       window.__keys.add(e.code);
       if (e.repeat) return;
-      if (e.code === 'KeyJ') window.__castQueue.push('crescent');
-      else if (e.code === 'KeyK') window.__castQueue.push('ember');
-      else if (e.code === 'KeyL') window.__castQueue.push('glassguard');
-      else if (e.code === 'Space') window.__castQueue.push('starfall');
+      if (e.code === 'KeyJ' || e.code === 'KeyQ') window.__castQueue.push('crescent');
+      else if (e.code === 'KeyK' || e.code === 'KeyE') window.__castQueue.push('ember');
+      else if (e.code === 'KeyL' || e.code === 'KeyR') window.__castQueue.push('glassguard');
+      else if (e.code === 'Space' || e.code === 'KeyF') window.__castQueue.push('starfall');
+      else if (e.code === 'KeyC') window.__castQueue.push('frost');
+      else if (e.code === 'KeyB' && this.onBag) this.onBag();
       else if (e.code === 'Escape' && this.onPause) this.onPause();
     });
     window.addEventListener('keyup', (e) => window.__keys.delete(e.code));

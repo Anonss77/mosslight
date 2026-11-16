@@ -10,6 +10,7 @@ import { makeRng } from './random.js';
 import {
   buildLantern, buildAuraRing, buildMoth,
   buildPuffcap, buildTinket, buildBrambler, buildBoss,
+  buildWisp, buildBulwark, buildMagnet, buildBomb, buildStarchip,
   buildCoin, buildHeart, buildShard, buildChest, buildStatue, buildProp,
   buildSlash, buildEmberPatch, buildStreak, buildTelegraphRing, buildAimLine,
   blobShadow, lam,
@@ -91,7 +92,7 @@ export function createWorld(canvas) {
     // Speckle.
     ctx.fillStyle = pal.highlight;
     ctx.globalAlpha = 0.35;
-    for (let i = 0; i < 900; i++) ctx.fillRect((i * 53) % 1200, (i * 97) % 900, 2, 2);
+    for (let i = 0; i < 1600; i++) ctx.fillRect((i * 53) % 1200, (i * 97) % 900, 2, 2);
     ctx.globalAlpha = 1;
     // Area features, seeded (same seed every bake -> same layout).
     if (area === 0) {
@@ -150,9 +151,9 @@ export function createWorld(canvas) {
 
   // ---- props (visual only, rebuilt per area from a fixed seed) ----
   const PROP_KINDS = [
-    ['flower', 'tuft', 'pond', 'mushroom', 'tree'],
-    ['anvil', 'gear', 'furnace', 'crystal', 'rock'],
-    ['crystal', 'obelisk', 'starflower', 'fungus', 'rock'],
+    ['flower', 'tuft', 'pond', 'mushroom', 'tree', 'bush', 'stump'],
+    ['anvil', 'gear', 'furnace', 'crystal', 'rock', 'barrel', 'crate'],
+    ['crystal', 'obelisk', 'starflower', 'fungus', 'rock', 'moonflower', 'spire'],
   ];
   function buildProps() {
     scene.remove(propGroup);
@@ -171,9 +172,7 @@ export function createWorld(canvas) {
       group.scale.setScalar(vrng.range(0.85, 1.3));
       propGroup.add(group);
     }
-    // Grass tufts: one instanced mesh, thousands of blades. Dense on
-    // purpose (v6: every frame must read full) — the tufts are small,
-    // so the count is high and the blades are chunky.
+    // Grass tufts: one instanced mesh, 1600 tufts x 3 chunky blades.
     const tuftGeo = new THREE.ConeGeometry(0.13, 0.85, 5);
     const tuftMat = new THREE.MeshLambertMaterial({ color: area === 2 ? 0xa7e760 : 0x5da85a });
     const TUFTS = 1600;
@@ -188,8 +187,7 @@ export function createWorld(canvas) {
     }
     tufts.instanceMatrix.needsUpdate = true;
     propGroup.add(tufts);
-    // Border trees: a dense forest edge around the field (instanced
-    // trunk + canopy) — the field ends in trees, never a wall.
+    // Border trees: the field ends in trees, never a wall.
     const per = Math.floor((FW + FH) * 2 / 2.4);
     const trunkGeo = new THREE.CylinderGeometry(0.14, 0.22, 0.9, 7);
     const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6a452c });
@@ -199,9 +197,7 @@ export function createWorld(canvas) {
     const canopies = new THREE.InstancedMesh(canopyGeo, canopyMat, per);
     for (let i = 0; i < per; i++) {
       const t = (i / per) * (FW + FH) * 2;
-      // Jittered on purpose: a forest edge, not a fence — trees sit at
-      // varying depths (some a few units inside the field edge) and the
-      // spacing is uneven, so the border never reads as a wall.
+      // Jittered: a forest edge, not a fence — uneven depth and spacing.
       const jt = vrng.range(-0.9, 0.9); // along the edge
       const jd = vrng.range(-0.3, 2.4); // depth into the field
       let x, z;
@@ -209,9 +205,7 @@ export function createWorld(canvas) {
       else if (t < FW + FH) { x = FW - 0.6 - jd; z = t - FW + jt; }
       else if (t < FW * 2 + FH) { x = FW - (t - FW - FH) + jt; z = FH - 0.6 - jd; }
       else { x = 0.6 + jd; z = FH - (t - FW * 2 - FH) + jt; }
-      // v7: the north row (the far horizon the 38 deg camera looks at) is
-      // 2.2x taller, so the top of the frame shows a forest silhouette
-      // under the gradient sky instead of a flat empty band.
+      // v7: north row 2.2x taller — a forest silhouette, not a flat band.
       const s = (0.8 + tileHash(i * 3, area) * 1.2) * (t < FW ? 2.2 : 1);
       m4.compose(pv.set(x, 0.45 * s, z), q, sv.set(s, s, s));
       trunks.setMatrixAt(i, m4);
@@ -243,8 +237,7 @@ export function createWorld(canvas) {
   // ---- entity mesh pools ----
   const enemyMeshes = new Map(); // id -> {group, parts, type}
   const hpBars = new Map(); // enemy id -> {group, fill, fillW}; v7: small HP
-  // bar above every enemy, billboarded to the camera, so an enemy is
-  // readable at a glance even when its body blends with the decor.
+  // bar above every enemy, billboarded, so enemies read at a glance.
   let bossHpBar = null;
   const lootMeshes = new Map(); // id -> {group, parts, kind}
   const pickupMeshes = new Map(); // id -> {group, parts, kind}
@@ -253,10 +246,11 @@ export function createWorld(canvas) {
   const damagePool = [];
   const telegraphPool = [];
   const aimPool = [];
-  let neri = null; // { group, model, modelMat, mixer, actions, lantern, aura, moth, current, oneshot, prevCd, prevHurt, yawOffset }
+  let neri = null; 
   let neriLoading = null;
   let bossMesh = null;
   let slashMesh = null;
+  let shieldMesh = null;
   let emberMeshes = new Map(); // patch id -> group
   const streakPool = [];
 
@@ -325,7 +319,7 @@ export function createWorld(canvas) {
         const built = {
           group, model, modelMat, mixer, actions, lantern, aura, moth,
           current: actions.idle || null, oneshot: null,
-          prevCd: { crescent: 0, ember: 0, glassguard: 0, starfall: 0 },
+          prevCd: { crescent: 0, ember: 0, glassguard: 0, starfall: 0, frost: 0 },
           prevHurt: 0, yawOffset: 0,
         };
         mixer.addEventListener('finished', (e) => { if (built.oneshot === e.action) built.oneshot = null; });
@@ -486,7 +480,7 @@ export function createWorld(canvas) {
       const loop = p.moving ? 'walk' : 'idle';
       if (p.hurtT > 0 && neri.prevHurt <= 0 && a.hurt) neri.oneshot = a.hurt;
       neri.prevHurt = p.hurtT;
-      for (const k of ['crescent', 'ember', 'glassguard', 'starfall']) {
+      for (const k of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
         const cd = p.cooldowns[k] || 0;
         if (neri.prevCd[k] <= 0.05 && cd > 1) {
           neri.oneshot = (k === 'starfall' && a.castLong) ? a.castLong : a.cast;
@@ -516,12 +510,29 @@ export function createWorld(canvas) {
       }
     }
 
+
+    if (p.shield > 0) {
+      if (!shieldMesh) {
+        shieldMesh = new THREE.Mesh(
+          new THREE.SphereGeometry(2.0, 18, 12),
+          new THREE.MeshBasicMaterial({ color: 0x7fd4ff, transparent: true, opacity: 0.28, depthWrite: false }),
+        );
+        scene.add(shieldMesh);
+      }
+      shieldMesh.visible = true;
+      shieldMesh.position.set(toX(p.x), 1.2, toZ(p.y));
+      shieldMesh.material.opacity = 0.22 + Math.sin(sim.time * 6) * 0.08;
+    } else if (shieldMesh) {
+      shieldMesh.visible = false;
+    }
+
     const seenEnemies = new Set();
     for (const e of sim.enemies) {
       seenEnemies.add(e.id);
       let em = enemyMeshes.get(e.id);
       if (!em) {
-        em = e.type === 'puffcap' ? buildPuffcap() : e.type === 'tinket' ? buildTinket() : buildBrambler();
+        const v = e.id % 3;
+        em = e.type === 'puffcap' ? buildPuffcap(v) : e.type === 'tinket' ? buildTinket(v) : e.type === 'wisp' ? buildWisp() : e.type === 'bulwark' ? buildBulwark() : buildBrambler(v);
         scene.add(em.group);
         enemyMeshes.set(e.id, { ...em, type: e.type });
       }
@@ -534,13 +545,14 @@ export function createWorld(canvas) {
       } else {
         g.scale.setScalar(1.25);
       }
+      if (e.type === 'wisp') y = 0.55 + Math.sin(sim.time * 3 + e.id) * 0.15;
       g.position.set(toX(e.x), y, toZ(e.y));
       g.rotation.y = e.faceAngle || 0;
       if (e.type === 'tinket') em.parts.key.rotation.y += dt * (e.moving ? 9 : 1.5);
       if (e.flashT > 0) {
-        const f = e.flashT > 0 ? 0.6 : 0;
         em.group.traverse((o) => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(0xffffff); });
-        void f;
+      } else if ((e.frozenT || 0) > 0) {
+        em.group.traverse((o) => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(0x3355cc); });
       } else {
         em.group.traverse((o) => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(0x000000); });
       }
@@ -587,7 +599,7 @@ export function createWorld(canvas) {
       seenLoot.add(l.id);
       let lm = lootMeshes.get(l.id);
       if (!lm) {
-        lm = l.kind === 'coin' ? buildCoin() : l.kind === 'heart' || l.kind === 'bigheart' ? buildHeart() : buildShard();
+        lm = l.kind === 'coin' ? buildCoin() : l.kind === 'heart' || l.kind === 'bigheart' ? buildHeart() : l.kind === 'magnet' ? buildMagnet() : l.kind === 'bomb' ? buildBomb() : l.kind === 'starchip' ? buildStarchip() : buildShard();
         scene.add(lm.group);
         lootMeshes.set(l.id, { ...lm, kind: l.kind });
       }
@@ -716,7 +728,7 @@ export function createWorld(canvas) {
       slashMesh.group.position.set(toX(s.x), 0.7, toZ(s.y));
       slashMesh.group.rotation.y = s.angle;
       const k = 1 - s.life / s.maxLife;
-      slashMesh.group.scale.setScalar(0.6 + k * 1.1);
+      slashMesh.group.scale.setScalar(0.9 + k * 1.6);
       slashMesh.parts.arc.material.opacity = 0.95 * (s.life / s.maxLife);
       slashMesh.parts.glow.material.opacity = 0.45 * (s.life / s.maxLife);
     } else if (slashMesh) {
@@ -748,6 +760,7 @@ export function createWorld(canvas) {
       let slot = streakPool[si];
       if (!slot) {
         slot = buildStreak();
+        slot.group.scale.set(1.8, 2.2, 1.8);
         scene.add(slot.group);
         streakPool.push(slot);
       }

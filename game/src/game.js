@@ -1,11 +1,7 @@
-// Mosslight v6 — game orchestration: state machine, waves, combat, boss
-// AI, loot, pickups, upgrades, score, the deterministic autotest bot,
-// HUD, minimap, and the screenshot/autotest hooks the verification tools
-// poll. All sim numbers come from config.js; all gameplay randomness from
-// the run RNG; the visual RNG feeds particles and decor only. The
-// simulation runs in px units on the 2400x1800 open field; world.js
-// renders it in 3D. No walls, no pathfinding: enemies walk straight at
-// Neri and the bot walks straight at its target.
+// Mosslight — game orchestration: state, waves, combat, boss AI, loot,
+// upgrades, score, autotest bot, HUD, minimap, screenshot hooks. Sim
+// numbers from config.js; randomness from the run RNG; visual RNG for
+// Open field, no walls: enemies walk straight at Neri.
 
 import {
   FIELD_W, FIELD_H,
@@ -49,7 +45,10 @@ export class Game {
     this.score = 0;
     this.coins = 0;
     this.shards = 0;
+    this.bag = { heart: 0, bomb: 0, magnet: 0 };
+    this.bagOpen = false;
     this.kills = 0;
+    this.chain = 0; // kills since Neri last took a hit (HUD streak)
     this.hitstop = 0;
     this.shakeT = 0; this.shakeMax = 1; this.shakeAmp = 0;
     this.lowHpWarnT = 0;
@@ -101,7 +100,8 @@ export class Game {
     this.streaks = [];
     this.slash = null;
     this.boss = null;
-    this.score = 0; this.coins = 0; this.shards = 0; this.kills = 0;
+    this.score = 0; this.coins = 0; this.shards = 0; this.kills = 0; this.chain = 0;
+    this.bag = { heart: 0, bomb: 0, magnet: 0 }; this.bagOpen = false;
     this.wave = 0; this.time = 0;
     this.done = null;
     this.chestCoins = new Map();
@@ -182,15 +182,18 @@ export class Game {
     const n = def.perGroup;
     const types = [];
     for (let i = 0; i < n; i++) types.push('puffcap');
-    // Composition rolls: tinkets from wave 2 (cap 2/group), bramblers
-    // from wave 3 (cap 1 early, 2 from wave 5).
+    // Composition: tinket w2+ (cap 2), brambler w3+ (cap 1, 2 from w5).
     const tinketCap = this.wave >= 2 ? 2 : 0;
     const bramCap = this.wave >= 3 ? (this.wave >= 5 ? 2 : 1) : 0;
-    let tinkets = 0, brams = 0;
+    const wispCap = this.wave >= 2 ? 2 : 0;
+    const bulCap = this.wave >= 4 ? (this.wave >= 6 ? 2 : 1) : 0;
+    let tinkets = 0, brams = 0, wisps = 0, buls = 0;
     for (let i = 0; i < n; i++) {
       const r = this.rng.f();
       if (tinkets < tinketCap && r < 0.28) { types[i] = 'tinket'; tinkets++; }
       else if (brams < bramCap && r >= 0.28 && r < 0.45) { types[i] = 'brambler'; brams++; }
+      else if (wisps < wispCap && r >= 0.45 && r < 0.62) { types[i] = 'wisp'; wisps++; }
+      else if (buls < bulCap && r >= 0.62 && r < 0.72) { types[i] = 'bulwark'; buls++; }
     }
     const base = spawnPoint(this.rng, this.player.x, this.player.y, SPAWN_MIN_DIST);
     for (const type of types) {
@@ -201,8 +204,7 @@ export class Game {
   }
 
   spawnBoss() {
-    // The boss spawns ~200px from the player in a random direction, so
-    // the fight starts immediately — no path, no boss room anymore.
+      // Boss spawns ~200px from the player, so the fight starts at once.
     const p = this.player;
     const u = this.rng.unit();
     const m = moveField(p.x, p.y, BOSS.moveRadius, u.x * BOSS.spawnDist, u.y * BOSS.spawnDist);
@@ -212,6 +214,7 @@ export class Game {
 
   // ---- one fixed step ----
   step(dt) {
+    if (this.bagOpen) return;
     this.time += dt;
     if (this.hitstop > 0) { this.hitstop--; return; }
     if (this.state === 'playing') this.updatePlaying(dt);
@@ -230,9 +233,8 @@ export class Game {
   updateIntermission(dt) {
     this.interT -= dt;
     const p = this.player;
-    // Standing near a statue channels it (1.2s) — also works in intermission.
     this.updateStatues(dt);
-    if (this.opts.autotest || this.opts.shot) this.botIntermission();
+    if ((this.opts.autotest || this.opts.shot) && this.interT < INTERMISSION_TIME - 1) this.botIntermission(); // bot buys 1s in, so the 3-card panel stays readable
     if (this.interT <= 0) {
       // Timeout: auto-buy the first affordable offer, else continue bare.
       const first = this.offers[0];
@@ -268,8 +270,7 @@ export class Game {
     const def = WAVES[this.wave - 1];
     if (this.groupsSpawned < def.groups) {
       this.spawnT += dt;
-      // First group: immediately on normal waves, at 7s on a boss wave
-      // (the boss itself spawns at 0s; adds arrive at 7/14/21/28s).
+      // First group at once (normal waves) or at 7s (boss wave).
       const firstAt = def.boss ? SPAWN_GROUP_EVERY : 0.01;
       if (this.spawnT >= SPAWN_GROUP_EVERY || (this.groupsSpawned === 0 && this.spawnT >= firstAt)) {
         this.spawnT = 0;
@@ -394,6 +395,7 @@ export class Game {
       const dmg = s.damage + (p.charmCrescent || 0);
       const a = p.faceAngle;
       this.slash = { x: p.x, y: p.y, angle: a, life: 0.22, maxLife: 0.22 };
+      burstParticles(this.particles, this.vrng, p.x, p.y, '#ffd76a', 12, 150);
       let hits = 0;
       for (const e of [...this.enemies]) {
         if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) { this.damageEnemy(e, dmg, 'skill', '#ffd76a'); hits++; }
@@ -411,6 +413,7 @@ export class Game {
       else { ax = p.x + p.fx * 100; ay = p.y + p.fy * 100; }
       const patch = { id: this.embers.length + 1, x: ax, y: ay, r: s.patchRadius, life: s.tickTime, tickT: SKILLS.ember.tickEvery, tick: s.tick + (p.charmEmber || 0), damage: s.damage };
       this.embers.push(patch);
+      burstParticles(this.particles, this.vrng, ax, ay, '#ff8a2a', 14, 130);
       for (const e of [...this.enemies]) {
         if (dist(ax, ay, e.x, e.y) <= s.patchRadius + e.radius) this.damageEnemy(e, s.damage, 'skill', '#ff8a2a');
       }
@@ -424,7 +427,34 @@ export class Game {
       p.starfallWindup = s.windup;
       p.starfallX = p.x; p.starfallY = p.y;
       this.audio.play('skill');
+    } else if (id === 'frost') {
+      for (const e of [...this.enemies]) {
+        if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) { e.frozenT = s.freeze; this.damageEnemy(e, s.damage, 'skill', '#7fd4ff'); }
+      }
+      burstParticles(this.particles, this.vrng, p.x, p.y, '#7fd4ff', 16, 160);
+      this.audio.play('skill');
     }
+    this.updateHUD();
+    return true;
+  }
+
+  // ---- backpack: stored items, used on tap (game pauses while open) ----
+  useBagItem(kind) {
+    if (!this.bag || (this.bag[kind] | 0) <= 0 || this.player.dead) return false;
+    const p = this.player;
+    this.bag[kind]--;
+    let msg = '', col = '#fff', snd = 'coin';
+    if (kind === 'heart') { p.hp = Math.min(p.maxHp, p.hp + LOOT.heartHeal); msg = `+${LOOT.heartHeal}`; col = '#6fe08a'; snd = 'heal'; }
+    else if (kind === 'bomb') {
+      for (const e of [...this.enemies]) if (dist(e.x, e.y, p.x, p.y) <= 220) this.damageEnemy(e, 30, 'skill', '#ff8a2a');
+      if (this.boss && dist(this.boss.x, this.boss.y, p.x, p.y) <= 220) this.damageBoss(30, 'skill');
+      msg = 'BOOM!'; col = '#ff8a2a'; snd = 'skill';
+    } else if (kind === 'magnet') {
+      for (const o of this.loot) { o.x = p.x; o.y = p.y; }
+      msg = 'MAGNET!'; col = '#7fe8ff';
+    }
+    addDamageNumber(this.damageNumbers, p.x, p.y - 24, msg, col, 20);
+    this.audio.play(snd);
     this.updateHUD();
     return true;
   }
@@ -434,11 +464,12 @@ export class Game {
     const s = SKILLS.starfall;
     const dmg = s.damage + (p.charmStar || 0);
     const cx = p.starfallX, cy = p.starfallY;
-    // Five gold streaks converge on the blast point (visual).
-    for (let i = 0; i < 5; i++) {
-      const a = (i / 5) * Math.PI * 2 + 0.4;
+    // Nine gold streaks converge on the blast point (visual).
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + 0.4;
       this.streaks.push({ x: cx + Math.cos(a) * 60, y: cy + Math.sin(a) * 60, h: 9, t: 0 });
     }
+    burstParticles(this.particles, this.vrng, cx, cy, '#ffd76a', 24, 200);
     let hitBoss = false;
     for (const e of [...this.enemies]) {
       if (dist(cx, cy, e.x, e.y) <= s.range + e.radius) {
@@ -472,9 +503,10 @@ export class Game {
     const idx = this.enemies.indexOf(e);
     if (idx >= 0) this.enemies.splice(idx, 1);
     this.kills++;
+    this.chain++;
     this.score += LOOT.killScore;
     const def = ENEMIES[e.type];
-    burstParticles(this.particles, this.vrng, e.x, e.y, e.type === 'puffcap' ? '#ff7fb0' : e.type === 'tinket' ? '#d89a4a' : '#6fe08a', FEEL.deathParticles, 100);
+    burstParticles(this.particles, this.vrng, e.x, e.y, e.type === 'puffcap' ? '#ff7fb0' : e.type === 'tinket' ? '#d89a4a' : e.type === 'wisp' ? '#7fe8ff' : e.type === 'bulwark' ? '#e8a34a' : '#6fe08a', FEEL.deathParticles, 100);
     for (let i = 0; i < def.coinDrop; i++) this.loot.push(createLoot('coin', e.x, e.y, this.rng));
     if (this.player.hp < this.player.maxHp && this.rng.chance(def.heartChance)) {
       this.loot.push(createLoot('heart', e.x, e.y, this.rng));
@@ -482,6 +514,9 @@ export class Game {
     if (def.shardChance > 0 && this.rng.chance(def.shardChance)) {
       this.loot.push(createLoot('shard', e.x, e.y, this.rng));
     }
+    if (def.magnetChance > 0 && this.rng.chance(def.magnetChance)) this.loot.push(createLoot('magnet', e.x, e.y, this.rng));
+    if (def.bombChance > 0 && this.rng.chance(def.bombChance)) this.loot.push(createLoot('bomb', e.x, e.y, this.rng));
+    if (def.starchipChance > 0 && this.rng.chance(def.starchipChance)) this.loot.push(createLoot('starchip', e.x, e.y, this.rng));
     this.audio.play('death');
   }
 
@@ -517,7 +552,6 @@ export class Game {
     this.loot.push(createLoot('bigheart', b.x, b.y, this.rng));
     this.shake(FEEL.shakeBossDeath.amp, FEEL.shakeBossDeath.time);
     this.audio.play('victory');
-    // Collect the boss loot instantly for the score tally, then end.
     this.score += BOSS.lootCoins * LOOT.coinScore + BOSS.lootShards * LOOT.shardScore;
     this.coins += BOSS.lootCoins;
     this.shards += BOSS.lootShards;
@@ -535,6 +569,7 @@ export class Game {
     }
     if (rest > 0) {
       p.hp -= rest;
+      this.chain = 0; // hit breaks the kill streak
       p.iframesT = PLAYER.iframes;
       p.hurtT = 0.25;
       this.shake(FEEL.shakePlayerHit.amp, FEEL.shakePlayerHit.time);
@@ -568,14 +603,12 @@ export class Game {
       e.contactCd = Math.max(0, e.contactCd - dt);
       const d = dist(e.x, e.y, p.x, p.y);
       e.faceAngle = Math.atan2(p.y - e.y, p.x - e.x);
-      if (e.type === 'puffcap') this.updatePuffcap(e, dt, d);
+      if ((e.frozenT || 0) > 0) { e.frozenT -= dt; e.moving = false; continue; }
+      if (e.type === 'puffcap' || e.type === 'wisp') this.updatePuffcap(e, dt, d);
       else if (e.type === 'tinket') this.updateTinket(e, dt, d);
       else this.updateBrambler(e, dt, d);
-      // Contact: regular enemies deal damage through their attacks only
-      // (puffcap hop landing, tinket bolt, brambler slam) — NOT by merely
-      // touching the player (v3-faithful; every-frame contact damage made
-      // any touch a death sentence). Glassguard's shield still hurts
-      // enemies that touch the player (0.5s per enemy).
+      // No contact damage: enemies hurt only via attacks (hop/bolt/slam).
+      // Glassguard still hurts touching enemies (0.5s per enemy).
       if (p.shield > 0 && d < e.radius + p.radius && e.contactCd <= 0) {
         e.contactCd = SKILLS.glassguard.contactEvery;
         this.damageEnemy(e, SKILLS.glassguard.contactDamage, 'skill', '#7fe8ff');
@@ -614,7 +647,7 @@ export class Game {
 
   updatePuffcap(e, dt, d) {
     const p = this.player;
-    const def = ENEMIES.puffcap;
+    const def = ENEMIES[e.type];
     e.hopT = Math.max(0, (e.hopT || 0) - dt);
     if (e.state === 'pause') {
       e.stateT -= dt;
@@ -638,8 +671,7 @@ export class Game {
       if (e.hopT <= 0) {
         e.state = 'chase';
         e.attackCd = def.attackCd;
-        // Hop landing: the attack itself. (v3: damage when the hop lands
-        // on the player; the pause before the hop is the dodge window.)
+        // Hop landing is the attack; the pause before it is the dodge window.
         if (dist(e.x, e.y, p.x, p.y) <= e.radius + p.radius + 4) {
           this.damagePlayer(def.damage, 'puffcap');
         }
@@ -661,9 +693,7 @@ export class Game {
     if (e.state === 'aim') {
       e.stateT -= dt;
       e.moving = false;
-      // Aim is LOCKED at aim start (aimX/aimY): the aim line shows where
-      // the bolt will go, and the player dodges by leaving that line.
-      // (Tracking the player made the bolt undodgeable.)
+      // Aim locks at aim start; the line shows where the bolt goes.
       this.setAimTelegraph(e);
       if (e.stateT <= 0) {
         e.state = 'chase';
@@ -706,7 +736,7 @@ export class Game {
 
   updateBrambler(e, dt, d) {
     const p = this.player;
-    const def = ENEMIES.brambler;
+    const def = ENEMIES[e.type];
     if (e.state === 'root') {
       e.stateT -= dt;
       e.moving = false;
@@ -943,10 +973,26 @@ export class Game {
           this.score += LOOT.shardScore;
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+25', '#7fb8ff', 18);
           this.audio.play('coin');
-        } else {
-          const heal = l.kind === 'bigheart' ? BOSS.lootHeart : LOOT.heartHeal;
-          p.hp = Math.min(p.maxHp, p.hp + heal);
-          addDamageNumber(this.damageNumbers, p.x, p.y - 24, `+${heal}`, '#6fe08a', 18);
+        } else if (l.kind === 'magnet') {
+          this.bag.magnet++;
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 🧲', '#7fe8ff', 18);
+          this.audio.play('coin');
+        } else if (l.kind === 'bomb') {
+          this.bag.bomb++;
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 💣', '#ff8a2a', 18);
+          this.audio.play('coin');
+        } else if (l.kind === 'heart') {
+          this.bag.heart++;
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 ❤️', '#6fe08a', 18);
+          this.audio.play('coin');
+        } else if (l.kind === 'starchip') {
+          this.shards += 2;
+          this.score += 50;
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+50 ⭐', '#ffd76a', 20);
+          this.audio.play('coin');
+        } else { // bigheart only: instant heal, the boss reward
+          p.hp = Math.min(p.maxHp, p.hp + BOSS.lootHeart);
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, `+${BOSS.lootHeart}`, '#6fe08a', 18);
           this.audio.play('heal');
         }
         this.loot.splice(i, 1);
@@ -1004,6 +1050,9 @@ export class Game {
         const n = this.chestCoins.get(c) || 5;
         this.coins += n;
         this.score += n * LOOT.coinScore;
+        const bk = ['heart', 'bomb', 'magnet'][this.rng.int(0, 2)];
+        this.bag[bk]++;
+        this.loot.push(createLoot('starchip', c.x, c.y, this.rng));
         addDamageNumber(this.damageNumbers, c.x, c.y - 20, `+${n}`, '#ffd76a', 18);
         burstParticles(this.particles, this.vrng, c.x, c.y, '#ffd76a', 6, 70);
         this.audio.play('coin');
@@ -1250,6 +1299,13 @@ export class Game {
       && ((this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= SKILLS.starfall.range) || nearCount(SKILLS.starfall.range) >= 4)) {
       this.castSkill('starfall');
     }
+    if (SKILLS.frost && p.cooldowns.frost <= 0 && p.energy >= SKILLS.frost.cost && nearCount(SKILLS.frost.range) >= 3) {
+      this.castSkill('frost');
+    }
+    
+    if (this.bag.heart > 0 && p.hp < p.maxHp * 0.5) this.useBagItem('heart');
+    else if (this.bag.bomb > 0 && nearCount(220) >= 5) this.useBagItem('bomb');
+    else if (this.bag.magnet > 0 && this.loot.length >= 8) this.useBagItem('magnet');
   }
 
   botIntermission() {
@@ -1303,7 +1359,7 @@ export class Game {
       }
     }
     // Skill buttons: cooldown sweep + energy state.
-    for (const id of ['crescent', 'ember', 'glassguard', 'starfall']) {
+    for (const id of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
       const btn = document.getElementById(`skill-${id}`);
       if (!btn) continue;
       const cd = p.cooldowns[id] / SKILLS[id].cd;
@@ -1313,6 +1369,22 @@ export class Game {
     }
     const scoreEl = $('scoreText');
     if (scoreEl) scoreEl.textContent = `Score ${this.score}`;
+    // Dense HUD: kills + streak, next wave, active build (all sim data).
+    const fightEl = $('fightText');
+    if (fightEl) fightEl.textContent = `⚔️ ${this.kills} KILLS${this.chain >= 2 ? ` · 🔥 CHAIN x${this.chain}` : ''}`;
+    const nextEl = $('nextText');
+    if (nextEl) {
+      if (this.wave >= WAVE_COUNT) nextEl.textContent = '';
+      else {
+        const nw = WAVES[this.wave];
+        nextEl.textContent = `NEXT: WAVE ${this.wave + 1} · ${nw.groups}×${nw.perGroup} · ${AREA_NAMES[nw.area]}${nw.boss ? ' · 👑 BOSS' : ''}`;
+      }
+    }
+    const buildEl = $('buildText');
+    if (buildEl) {
+      const owned = UPGRADES.filter((u) => (p.upgrades[u.id] | 0) > 0);
+      buildEl.textContent = owned.length ? `✦ ${owned.map((u) => `${u.name} ×${p.upgrades[u.id]}`).join(' · ')}` : '';
+    }
   }
 
   drawMinimap() {
@@ -1385,7 +1457,7 @@ export class Game {
     skip.innerHTML = '<b>Skip</b><span>save for later</span><em>—</em>';
     skip.onclick = () => { this.hideIntermission(); };
     row.appendChild(skip);
-    panel.style.display = 'block';
+    panel.classList.remove('hidden');
   }
 
   refreshOffers() {
@@ -1394,7 +1466,7 @@ export class Game {
 
   hideIntermission() {
     const panel = document.getElementById('interPanel');
-    if (panel) panel.style.display = 'none';
+    if (panel) panel.classList.add('hidden');
   }
 
   showResult() {
@@ -1410,12 +1482,12 @@ export class Game {
           ? 'You defeated the Gloam Bell and relit the wilds!'
           : 'The wilds keep their light… for now.');
     }
-    panel.style.display = 'block';
+    panel.classList.remove('hidden');
   }
 
   hideResult() {
     const panel = document.getElementById('resultPanel');
-    if (panel) panel.style.display = 'none';
+    if (panel) panel.classList.add('hidden');
   }
 
   // ---- shot conditions (screenshot hooks) ----
@@ -1423,6 +1495,7 @@ export class Game {
     const shot = this.opts.shot;
     if (!shot) return false;
     if (shot === 'start') return this.state === 'title';
+    if (shot === 'intermission') return this.state === 'intermission' && this.offers.length >= 2;
     if (this.state !== 'playing') return false;
     if (shot === 'combat') {
       // v7: mid-wave only (waveT counts down from 50, so <= 25 means at
@@ -1439,16 +1512,6 @@ export class Game {
       if (this.player.y <= this.boss.y) return false; // Neri below the boss
       return this.telegraphs.some((t) => t.owner === this.boss && t.kind === 'ring');
     }
-    return false;
-  }
-
-  shotPreconditionMet() {
-    const shot = this.opts.shot;
-    if (!shot || shot === 'start') return true;
-    if (this.state !== 'playing') return false;
-    if (shot === 'combat') return this.wave >= 1 && this.wave <= 3 && this.enemies.length >= 6;
-    if (shot === 'cinder') return this.wave >= 4 && this.enemies.length >= 5;
-    if (shot === 'boss') return this.wave === 8 && this.boss && this.boss.hp < this.boss.maxHp * 0.62;
     return false;
   }
 

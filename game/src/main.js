@@ -1,9 +1,6 @@
-// Mosslight v4 — bootstrap (3D). Creates the world + game, fits the
-// 1280x720 stage to the window, and drives the test hooks:
-//   ?shot=start|combat|cinder|boss&seed=N — stage the composition, freeze
-//     the sim, set window.__mosslight.shotReady = true.
-//   ?autotest=1&seed=N&speed=K — play a whole run with the deterministic
-//     bot (no rendering), set window.__mosslight.done.
+// Mosslight — bootstrap: world + game, stage fit, test hooks:
+//   ?shot=start|combat|cinder|boss|intermission — freeze the shot.
+//   ?autotest=1&seed=N&speed=K — full run with the bot, no rendering.
 import { Game, STEP } from './game.js';
 import { createWorld } from './world.js';
 import { Audio } from './audio.js';
@@ -33,9 +30,7 @@ const canvas = document.getElementById('game');
 const world = autotest
   ? { setField() {}, setArea() {} }
   : createWorld(canvas);
-// The stage is a fixed 1280x720: set the renderer + camera aspect once.
-// (resize() was never called, so the camera kept aspect 1 and the whole
-// 3D view was stretched 1.78x horizontally.)
+// Fixed 1280x720 stage: set renderer + camera aspect once.
 if (!autotest) world.resize(1280, 720);
 
 const game = new Game(world, audio, { seed, autotest: autotest || !!shot, shot: shot || null, speed });
@@ -86,9 +81,30 @@ $('muteBtn').addEventListener('click', () => {
 
 // Pause (Escape): freeze the sim, keep rendering the frozen frame.
 let paused = false;
+let bagOpen = false;
 function setPaused(p) {
   paused = p;
   pausePanel.classList.toggle('hidden', !p);
+}
+
+function renderBag() {
+  const b = game.bag || { heart: 0, bomb: 0, magnet: 0 };
+  $('bagCoins').textContent = `🪙 ${game.coins}   💎 ${game.shards}`;
+  for (const k of ['heart', 'bomb', 'magnet']) {
+    document.getElementById(`bag${k[0].toUpperCase() + k.slice(1)}N`).textContent = `x${b[k]}`;
+    document.getElementById(`bag-${k}`).classList.toggle('empty', b[k] <= 0);
+  }
+}
+function setBag(open) {
+  bagOpen = open;
+  game.bagOpen = open;
+  $('bagPanel').classList.toggle('hidden', !open);
+  if (open) renderBag();
+}
+$('bagBtn').addEventListener('click', () => { if (game.state === 'playing' || bagOpen) setBag(!bagOpen); });
+$('bagCloseBtn').addEventListener('click', () => setBag(false));
+for (const k of ['heart', 'bomb', 'magnet']) {
+  document.getElementById(`bag-${k}`).addEventListener('click', () => { if (game.useBagItem(k)) renderBag(); });
 }
 $('resumeBtn').addEventListener('click', () => setPaused(false));
 $('restartBtn').addEventListener('click', () => { setPaused(false); startRunWithSeed(game.seed); });
@@ -101,17 +117,19 @@ $('quitBtn').addEventListener('click', () => {
 
 const input = new Input();
 input.onPause = () => {
+  if (bagOpen) { setBag(false); return; }
   if (game.state === 'playing' || game.state === 'intermission') setPaused(!paused);
 };
+input.onBag = () => { if (game.state === 'playing' || bagOpen) setBag(!bagOpen); };
 input.bindJoystick($('joystick'), $('joyThumb'));
-for (const id of ['crescent', 'ember', 'glassguard', 'starfall']) {
+for (const id of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
   input.bindSkillButton($('skill-' + id), id);
 }
 
 if (autotest) {
-  // No rendering: run the sim as fast as possible in slices, so the
-  // verification poll can still reach the page between slices.
+  // No rendering: run the sim fast, in slices.
   game.startRun();
+  showHud();
   const runChunk = () => {
     const t0 = Date.now();
     while (!game.done && Date.now() - t0 < 150) game.step(STEP);
@@ -140,8 +158,7 @@ if (autotest) {
     frames++;
     if (paused) { world.render(); return; }
     if (game.shotReady) {
-      // Frozen composition: render it, and only signal the harness once
-      // Neri is actually loaded, so the screenshot includes her.
+      // Frozen shot: signal only once Neri is loaded.
       world.render();
       if (shot && !window.__mosslight.shotReady && world.isNeriLoaded()) {
         window.__mosslight.shotReady = true;
@@ -149,7 +166,7 @@ if (autotest) {
       return;
     }
     if (shot === 'start') {
-      // Title composition: let Neri settle into her Idle pose, then freeze.
+      // Title: let Neri settle into Idle, then freeze.
       world.sync(game, dt);
       world.render();
       if ((frames > 40 && world.isNeriLoaded()) || frames > 300) {
@@ -159,10 +176,7 @@ if (autotest) {
       return;
     }
     if (shot) {
-      // Gameplay-shot fast-forward: step the sim WITHOUT rendering.
-      // SwiftShader renders ~1 frame/s, so rendering every frame made a
-      // combat shot take >300s. Sync still runs (cheap) so the GLB loads
-      // and the meshes track the sim; the HUD stays current for the freeze.
+      // Shot fast-forward: step the sim WITHOUT rendering (SwiftShader ~1fps).
       for (let i = 0; i < speed; i++) game.step(STEP);
       if (game.done && !game.maybeRestartShot()) game.shotReady = true;
       else if (game.shotConditionMet()) game.shotReady = true;

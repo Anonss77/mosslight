@@ -1,8 +1,6 @@
-// Mosslight v6 — open field: no dungeon, no walls, no corridors, no void.
-// One big open field per run (2400x1800 px). Enemies spawn at the edge of
-// the camera view and walk straight at Neri; decor has no collision.
-// The field edge is a dense tree line, far from the action — never a wall.
-// Everything is deterministic from the run seed (mulberry32).
+// Mosslight — open field (2400x1800): no dungeon, walls, or void. Enemies
+// spawn at the camera edge and walk straight at Neri; decor has no
+// Edge is a tree line, never a wall. Deterministic (mulberry32).
 
 import { FIELD_W, FIELD_H } from './config.js';
 import { makeRng } from './random.js';
@@ -22,7 +20,7 @@ export function hashField(f) {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-// Clamp a point inside the field (soft edge — no wall, just the field end).
+// Clamp a point inside the field (soft edge, no wall).
 export function clampField(x, y, r) {
   return { x: clamp(x, r, FIELD_W - r), y: clamp(y, r, FIELD_H - r) };
 }
@@ -55,8 +53,7 @@ function scatter(rng, n, minR) {
   return out;
 }
 
-// Chests (3, coins), statues (3, +20 energy), static pickups:
-// gems (8, +1 shard), coin piles (10, +3 coins), hearts (6, +20 HP).
+// Chests 3, statues 3, gems 8, coin piles 10, hearts 6.
 export function generateField(seed) {
   const rng = makeRng(seed);
   const chests = scatter(rng, 3, 220).map((p) => ({ ...p, opened: false }));

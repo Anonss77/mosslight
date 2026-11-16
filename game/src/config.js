@@ -1,10 +1,4 @@
-// Mosslight v4 — all design numbers.
-// Sources: Sol's survival design (sol-survival-reply.md) + the as-built
-// balance deviations recorded in BUILD-LOG-mosslight.md (boss 950 HP,
-// wave-8 adds 4x3 @ 1.5x, ring 140px/0.9s, raised heart rates, boss spawns
-// near the player). Visual numbers come from the v3 brief (bright palettes,
-// HUD sizes). Nothing here is copied from the v1-v3 code; every value is
-// re-stated from the design prose.
+// Mosslight — all design numbers (sources in BUILD-LOG-mosslight.md).
 
 export const TILE = 16; // px per tile (kept for the px<->unit render scale)
 export const FIELD_W = 2400; // px — one big open field, no dungeon
@@ -13,15 +7,10 @@ export const WORLD_W = FIELD_W;
 export const WORLD_H = FIELD_H;
 export const UNIT = TILE; // 1 world unit = 16 px (render scale)
 
-// ---- deterministic rotation constants (v6) ----
-// Math.sin/cos/atan2 are NOT correctly rounded: Node 24's V8 and the
-// Chromium V8 in the headless shell differ by 1 ULP on some inputs, and
-// that 1 ULP desyncs the sim across environments (verified: seed 42
-// diverges at step 720). The sim therefore uses NO trig at all — only
-// correctly-rounded ops (sqrt, hypot, + - * /). Rotations by a FIXED
-// angle use these decimal literals, which parse to identical doubles in
-// every JS engine. (Render-only code in world.js/models.js still uses
-// Math.sin/cos — it never feeds the sim.)
+// ---- rotation constants (v6) ----
+// NO trig in the sim: sin/cos/atan2 differ 1 ULP between Node and Chrome
+// V8 and desync the run (seed 42, step 720). Fixed-angle rotations use
+// these literals (identical doubles everywhere). Render code may use trig.
 export const COS05 = 0.8775825618903728, SIN05 = 0.479425538604203; // cos/sin(0.5)
 export const COS06 = 0.8253356149096783, SIN06 = 0.5646424733950355; // cos/sin(0.6)
 // Boss fan: 5 shards at -24,-12,0,12,24 deg from the base direction.
@@ -43,9 +32,8 @@ export const SPAWN_MIN_DIST = 240; // px from the player
 export const VICTORY_BONUS = 5000;
 export const DEFEAT_PER_WAVE = 100;
 
-// waves: area, spawn groups, enemies per group, HP mult, speed mult
-// (v6: more enemies per group than the dungeon build — same per-enemy
-// stats, just more of them on screen at once; wave 8: boss + 4 groups x 5)
+// waves: area, groups, enemies per group, HP mult, speed mult
+// (v6: more per group than the dungeon build, same per-enemy stats)
 export const WAVES = [
   { area: 0, groups: 5, perGroup: 5, hpMul: 1.0, spMul: 1.0 },
   { area: 0, groups: 6, perGroup: 5, hpMul: 1.1, spMul: 1.0 },
@@ -74,10 +62,11 @@ export const PLAYER = {
 };
 
 export const SKILLS = {
-  crescent: { name: 'Crescent Cut', cost: 20, cd: 4, range: 56, damage: 26, key: 'J' },
-  ember: { name: 'Ember Bloom', cost: 30, cd: 7, range: 160, patchRadius: 72, damage: 12, tick: 8, tickEvery: 0.5, tickTime: 2, key: 'K' },
-  glassguard: { name: 'Glassguard', cost: 25, cd: 9, shield: 35, shieldTime: 3, contactDamage: 10, contactEvery: 0.5, key: 'L' },
-  starfall: { name: 'Starfall', cost: 100, cd: 30, windup: 0.6, range: 135, damage: 90, knockback: 90, key: ' ' },
+  crescent: { name: 'Crescent Cut', cost: 20, cd: 4, range: 56, damage: 26 },
+  ember: { name: 'Ember Bloom', cost: 30, cd: 7, range: 160, patchRadius: 72, damage: 12, tick: 8, tickEvery: 0.5, tickTime: 2 },
+  glassguard: { name: 'Glassguard', cost: 25, cd: 9, shield: 35, shieldTime: 3, contactDamage: 10, contactEvery: 0.5 },
+  starfall: { name: 'Starfall', cost: 100, cd: 30, windup: 0.6, range: 135, damage: 90, knockback: 90,  },
+  frost: { name: 'Frost Nova', cost: 35, cd: 10, range: 200, freeze: 2.5, damage: 10,  },
 };
 
 // ---- enemies (base values, before wave multipliers) ----
@@ -85,17 +74,29 @@ export const ENEMIES = {
   puffcap: {
     name: 'Puffcap', hp: 24, speed: 55, radius: 10, moveRadius: 7,
     attackRange: 30, pauseTime: 0.35, hopDist: 46, hopTime: 0.25, damage: 8, attackCd: 1.4,
-    coinDrop: 1, heartChance: 0.25, shardChance: 0, // heart chance raised (as-built)
+    coinDrop: 1, heartChance: 0.25, shardChance: 0, magnetChance: 0, bombChance: 0,
   },
   tinket: {
     name: 'Tinket', hp: 18, speed: 42, radius: 9, moveRadius: 7,
     stopRange: 145, aimTime: 0.55, boltSpeed: 180, damage: 7, attackCd: 2.2,
-    coinDrop: 1, heartChance: 0.2, shardChance: 0,
+    coinDrop: 1, heartChance: 0.2, shardChance: 0, magnetChance: 0, bombChance: 0,
   },
   brambler: {
     name: 'Brambler', hp: 55, speed: 32, radius: 12, moveRadius: 7,
     attackRange: 48, rootTime: 0.45, ringRadius: 70, damage: 16, attackCd: 2.6,
-    coinDrop: 2, heartChance: 0.22, shardChance: 0.25,
+    coinDrop: 2, heartChance: 0.22, shardChance: 0.25, magnetChance: 0, bombChance: 0.1,
+  },
+
+  wisp: {
+    name: 'Wisp', hp: 12, speed: 88, radius: 7, moveRadius: 6,
+    attackRange: 26, pauseTime: 0.3, hopDist: 60, hopTime: 0.22, damage: 5, attackCd: 1.1,
+    coinDrop: 1, heartChance: 0.15, shardChance: 0, magnetChance: 0.15, bombChance: 0,
+  },
+
+  bulwark: {
+    name: 'Bulwark', hp: 90, speed: 24, radius: 14, moveRadius: 8,
+    attackRange: 52, rootTime: 0.5, ringRadius: 78, damage: 20, attackCd: 3.0,
+    coinDrop: 3, heartChance: 0.25, shardChance: 0.3, magnetChance: 0, bombChance: 0.25, starchipChance: 0.1,
   },
 };
 // group composition caps by wave
@@ -104,6 +105,8 @@ export const TINKET_MAX_PER_GROUP = 2;
 export const BRAMBLER_FROM_WAVE = 3;
 export const BRAMBLER_MAX_PER_GROUP_EARLY = 1; // waves 3-4
 export const BRAMBLER_MAX_PER_GROUP_LATE = 2; // waves 5+
+export const WISP_FROM_WAVE = 2;
+export const BULWARK_FROM_WAVE = 4;
 
 // ---- boss: The Gloam Bell (as-built: 950 HP, ring 140px / 0.9s) ----
 export const BOSS = {
@@ -176,12 +179,12 @@ export const FEEL = {
   hitstopStarfallBoss: 5, // frames
   shakePlayerHit: { amp: 3, time: 0.08 },
   shakeSlam: { amp: 5, time: 0.12 },
-  shakeStarfall: { amp: 8, time: 0.16 },
+  shakeStarfall: { amp: 12, time: 0.16 },
   shakeBossDeath: { amp: 10, time: 0.2 },
   damageRise: 22, // px
   damageLife: 0.65, // s
-  deathParticles: 8,
-  bossDeathParticles: 24,
+  deathParticles: 14,
+  bossDeathParticles: 36,
   particleLife: 0.45, // s
   lowHp: 25,
   lowHpPulseHz: 2,
@@ -213,20 +216,15 @@ export const AREAS = [
 // ---- 3D camera / render ----
 export const CAM = {
   fov: 50, // vertical degrees
-  tiltDeg: 38, // camera looks down 38 deg below horizontal (v7: was 55 —
-  // at 55 deg Neri read as "just a purple hat" — her face + robe were
-  // hidden under the hat brim; at 38 they show. Sky band at the top of
-  // the frame when Neri is near the north edge is the area sky colour,
-  // not void — the ground still fills every frame below the tree line.
+  tiltDeg: 38, // v7: was 55 — at 55 Neri read as "just a hat"; at 38 her
+  // face + robe show. The sky band at the north edge is sky, not void.
   dist: 16, // world units from the target point
   targetHeight: 1.4, // world units above the floor (Neri's chest)
-  neriHeight: 3.4, // world units tall (renders ~130px at 1280x720;
-  // the user asked for a BIG clear hero, so she is the largest
-  // readable character on screen — bigger than any regular enemy).
+  neriHeight: 3.4, // world units (~130px at 1280x720); Neri is the biggest
+  // readable character on screen, bigger than any regular enemy.
   bossHeight: 4.6, // world units tall (the bell is BIG)
   maxPitch: 0.35, // how far ahead the camera looks (units, north of Neri)
-  titleShiftX: 9, // on the title screen the camera target shifts left so
-  // Neri appears right of the centred title panel (visible, ~1080px).
+  titleShiftX: 9, // title screen: Neri stands right of the panel.
 };
 
 // ---- HUD (v3 numbers, kept) ----

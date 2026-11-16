@@ -1,8 +1,5 @@
-// Mosslight v4 — deterministic RNG (Mulberry32, the design's chosen PRNG).
-// Fresh implementation from the algorithm's definition; no Math.random
-// anywhere in the game. One stream per purpose so visuals never shift
-// gameplay rolls: the run stream feeds dungeon/spawns/loot/offers, the
-// visual stream feeds decor and particle jitter only.
+// Mosslight — deterministic RNG (Mulberry32). No Math.random anywhere.
+// One stream per purpose: run stream for gameplay, visual stream for decor.
 
 export function mulberry32(seed) {
   let a = seed >>> 0;

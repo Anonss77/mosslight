@@ -1,8 +1,5 @@
-// Mosslight v4 — audio. Web Audio API only: oscillators and generated
-// noise, no audio files. The sim calls audio.play(name) for every event;
-// in headless test mode main.js sets audio.headless = true, so unlock()
-// never creates a context and play() is a silent no-op (the sim must
-// never wait on sound). Master volume 0.6, at most 8 voices at once.
+// Mosslight — audio. Web Audio only: oscillators + generated noise, no
+// Headless: play() is a silent no-op.
 
 export class Audio {
   constructor() {

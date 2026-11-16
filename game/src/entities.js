@@ -1,9 +1,6 @@
-// Mosslight v4 — simulation entities: plain data factories, the spatial
-// hash that keeps targeting and collisions cheap, and the small helpers
-// that spawn visual objects (particles, damage numbers) from game events.
-// All numbers come from config.js; gameplay randomness comes from the run
-// RNG passed in by game.js; particle jitter comes from the visual RNG.
-// No rendering code lives here — world.js turns these objects into meshes.
+// Mosslight — sim entities: data factories, spatial hash, visual helpers.
+// Numbers from config.js; gameplay RNG from game.js; visual RNG for jitter.
+// No rendering here — world.js turns these objects into meshes.
 
 import { PLAYER, SKILLS, ENEMIES, BOSS, LOOT, FEEL } from './config.js';
 
@@ -49,7 +46,7 @@ export function createPlayer(x, y) {
     radius: PLAYER.radius, moveRadius: PLAYER.moveRadius,
     boltTimer: 0,
     boltDamage: PLAYER.boltDamage, boltInterval: PLAYER.boltInterval, boltRange: PLAYER.boltRange,
-    cooldowns: { crescent: 0, ember: 0, glassguard: 0, starfall: 0 },
+    cooldowns: { crescent: 0, ember: 0, glassguard: 0, starfall: 0, frost: 0 },
     shield: 0, shieldT: 0,
     iframesT: 0, castT: 0, hurtT: 0,
     starfallWindup: 0, starfallX: 0, starfallY: 0,
@@ -135,8 +132,7 @@ export function updateParticles(list, dt) {
   }
 }
 
-// Damage numbers: horizontal stagger cycles -9 / 0 / +9 px so two hits on
-// adjacent enemies never merge into one unreadable blob (v3 bug fix).
+// Damage numbers stagger -9/0/+9 px so adjacent hits never merge.
 let staggerIdx = 0;
 export function resetStagger() { staggerIdx = 0; }
 export function addDamageNumber(list, x, y, text, color, sizePx) {
