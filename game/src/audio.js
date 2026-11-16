@@ -1,5 +1,5 @@
-// Mosslight — audio. Web Audio only: oscillators + generated noise, no
-// Headless: play() is a silent no-op.
+
+
 
 export class Audio {
   constructor() {
@@ -10,7 +10,7 @@ export class Audio {
     this.headless = false;
   }
 
-  // Called on the first user gesture (start button). No-op in tests.
+
   unlock() {
     if (this.headless) return;
     this.ensure();
@@ -38,7 +38,7 @@ export class Audio {
     return this.muted;
   }
 
-  // One tone: waveform, frequency slide from f0 to f1 over dur, gain.
+
   tone(type, f0, f1, dur, gain, when = 0) {
     if (!this.ctx || this.muted || this.voices >= 8) return;
     const t0 = this.ctx.currentTime + when;
@@ -56,7 +56,7 @@ export class Audio {
     o.onended = () => { this.voices--; };
   }
 
-  // Filtered noise burst (impacts, roars, deaths).
+
   noise(dur, gain, freq = 900, type = 'highpass', when = 0) {
     if (!this.ctx || this.muted || this.voices >= 8) return;
     const t0 = this.ctx.currentTime + when;
@@ -77,7 +77,7 @@ export class Audio {
     src.onended = () => { this.voices--; };
   }
 
-  // Every name game.js plays.
+
   play(name) {
     if (!this.ctx || this.muted) return;
     switch (name) {

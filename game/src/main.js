@@ -1,12 +1,12 @@
-// Mosslight — bootstrap: world + game, stage fit, test hooks:
-//   ?shot=start|combat|cinder|boss|intermission — freeze the shot.
-//   ?autotest=1&seed=N&speed=K — full run with the bot, no rendering.
+
+
+
 import { Game, STEP } from './game.js';
 import { createWorld } from './world.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 
-// Fit the fixed 1280x720 stage into the window, letterboxed.
+
 function fitStage() {
   const stage = document.getElementById('stage');
   const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
@@ -24,13 +24,13 @@ const speed = Math.max(1, Math.min(30, parseInt(params.get('speed') || '10', 10)
 const audio = new Audio();
 if (autotest || shot) audio.headless = true;
 
-// In autotest mode there is no rendering: a stub world (the sim only
-// calls world.setField / world.setArea) keeps WebGL out of the run.
+
+
 const canvas = document.getElementById('game');
 const world = autotest
   ? { setField() {}, setArea() {} }
   : createWorld(canvas);
-// Fixed 1280x720 stage: set renderer + camera aspect once.
+
 if (!autotest) world.resize(1280, 720);
 
 const game = new Game(world, audio, { seed, autotest: autotest || !!shot, shot: shot || null, speed });
@@ -79,7 +79,7 @@ $('muteBtn').addEventListener('click', () => {
   $('muteBtn').textContent = muted ? '🔇' : '🔊';
 });
 
-// Pause (Escape): freeze the sim, keep rendering the frozen frame.
+
 let paused = false;
 let bagOpen = false;
 function setPaused(p) {
@@ -127,7 +127,7 @@ for (const id of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
 }
 
 if (autotest) {
-  // No rendering: run the sim fast, in slices.
+
   game.startRun();
   showHud();
   const runChunk = () => {
@@ -141,8 +141,8 @@ if (autotest) {
   };
   runChunk();
 } else {
-  // Rendering loop (normal play + shot staging).
-  world.loadNeri(); // the hero loads in the background; sync picks her up
+
+  world.loadNeri();
   if (shot && shot !== 'start') {
     showHud();
     game.startRun();
@@ -158,7 +158,7 @@ if (autotest) {
     frames++;
     if (paused) { world.render(); return; }
     if (game.shotReady) {
-      // Frozen shot: signal only once Neri is loaded.
+
       world.render();
       if (shot && !window.__mosslight.shotReady && world.isNeriLoaded()) {
         window.__mosslight.shotReady = true;
@@ -166,7 +166,7 @@ if (autotest) {
       return;
     }
     if (shot === 'start') {
-      // Title: let Neri settle into Idle, then freeze.
+
       world.sync(game, dt);
       world.render();
       if ((frames > 40 && world.isNeriLoaded()) || frames > 300) {
@@ -176,13 +176,13 @@ if (autotest) {
       return;
     }
     if (shot) {
-      // Shot fast-forward: step the sim WITHOUT rendering (SwiftShader ~1fps).
+
       for (let i = 0; i < speed; i++) game.step(STEP);
       if (game.done && !game.maybeRestartShot()) game.shotReady = true;
       else if (game.shotConditionMet()) game.shotReady = true;
       world.sync(game, dt);
       game.updateHUD();
-      if (game.shotReady) game.drawMinimap(); // freeze the minimap too
+      if (game.shotReady) game.drawMinimap();
       return;
     }
     game.step(STEP);

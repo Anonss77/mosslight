@@ -1,7 +1,7 @@
-// Mosslight — game orchestration: state, waves, combat, boss AI, loot,
-// upgrades, score, autotest bot, HUD, minimap, screenshot hooks. Sim
-// numbers from config.js; randomness from the run RNG; visual RNG for
-// Open field, no walls: enemies walk straight at Neri.
+
+
+
+
 
 import {
   FIELD_W, FIELD_H,
@@ -22,7 +22,7 @@ import {
   resetStagger,
 } from './entities.js';
 
-export const STEP = 1 / 60; // fixed timestep, seconds
+export const STEP = 1 / 60;
 
 const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -31,14 +31,14 @@ export class Game {
   constructor(world, audio, opts = {}) {
     this.world = world;
     this.audio = audio;
-    this.opts = opts; // {seed, autotest, shot, speed}
+    this.opts = opts;
     this.seed = opts.seed ?? 20261116;
     this.rng = makeRng(this.seed);
     this.vrng = makeRng((this.seed ^ 0x51ab3f) >>> 0);
     this.state = 'title';
-    this.time = 0; // sim time, seconds (deterministic)
+    this.time = 0;
     this.wave = 0;
-    this.waveT = 0; // wave timer
+    this.waveT = 0;
     this.interT = 0;
     this.groupsSpawned = 0;
     this.spawnT = 0;
@@ -47,8 +47,9 @@ export class Game {
     this.shards = 0;
     this.bag = { heart: 0, bomb: 0, magnet: 0 };
     this.bagOpen = false;
+    this.deny = null;
     this.kills = 0;
-    this.chain = 0; // kills since Neri last took a hit (HUD streak)
+    this.chain = 0;
     this.hitstop = 0;
     this.shakeT = 0; this.shakeMax = 1; this.shakeAmp = 0;
     this.lowHpWarnT = 0;
@@ -67,7 +68,7 @@ export class Game {
     this.player = null;
     this.field = null;
     this.area = 0;
-    this.done = null; // set once on victory/defeat {result, score, ...}
+    this.done = null;
     this.shotReady = false;
     this.shotSeedTries = 0;
     this.bot = { path: [], pathI: 0, repathT: 0, orbitDir: 1, orbitT: 0, target: null, stuckT: 0, lastX: 0, lastY: 0, wanderT: 0, wanderX: 0, wanderY: 0 };
@@ -77,7 +78,7 @@ export class Game {
     this.buildRun();
   }
 
-  // ---- run setup ----
+
   buildRun() {
     freshIds();
     resetStagger();
@@ -85,8 +86,8 @@ export class Game {
     this.vrng = makeRng((this.seed ^ 0x51ab3f) >>> 0);
     this.field = generateField(this.seed);
     this.world.setField(this.field);
-    // Neri spawns at the centre of the open field, facing south (toward
-    // the camera) so the title pose shows her front-on.
+
+
     this.player = createPlayer(FIELD_W / 2, FIELD_H / 2);
     this.area = 0;
     this.enemies = [];
@@ -101,15 +102,15 @@ export class Game {
     this.slash = null;
     this.boss = null;
     this.score = 0; this.coins = 0; this.shards = 0; this.kills = 0; this.chain = 0;
-    this.bag = { heart: 0, bomb: 0, magnet: 0 }; this.bagOpen = false;
+    this.bag = { heart: 0, bomb: 0, magnet: 0 }; this.bagOpen = false; this.deny = null;
     this.wave = 0; this.time = 0;
     this.done = null;
     this.chestCoins = new Map();
     for (const c of this.field.chests) {
       this.chestCoins.set(c, this.rng.int(LOOT.chestCoinsMin, LOOT.chestCoinsMax));
     }
-    // Roll the intermission offers for wave 1's intermission up front? No:
-    // offers are rolled when an intermission starts, in run order.
+
+
     this.updateHUD();
   }
 
@@ -175,14 +176,14 @@ export class Game {
     return true;
   }
 
-  // ---- spawning ----
+
   spawnGroup() {
     const def = WAVES[this.wave - 1];
     if (this.enemies.length >= MAX_ENEMIES) return;
     const n = def.perGroup;
     const types = [];
     for (let i = 0; i < n; i++) types.push('puffcap');
-    // Composition: tinket w2+ (cap 2), brambler w3+ (cap 1, 2 from w5).
+
     const tinketCap = this.wave >= 2 ? 2 : 0;
     const bramCap = this.wave >= 3 ? (this.wave >= 5 ? 2 : 1) : 0;
     const wispCap = this.wave >= 2 ? 2 : 0;
@@ -204,7 +205,7 @@ export class Game {
   }
 
   spawnBoss() {
-      // Boss spawns ~200px from the player, so the fight starts at once.
+
     const p = this.player;
     const u = this.rng.unit();
     const m = moveField(p.x, p.y, BOSS.moveRadius, u.x * BOSS.spawnDist, u.y * BOSS.spawnDist);
@@ -212,18 +213,18 @@ export class Game {
     this.audio.play('roar');
   }
 
-  // ---- one fixed step ----
+
   step(dt) {
     if (this.bagOpen) return;
     this.time += dt;
     if (this.hitstop > 0) { this.hitstop--; return; }
     if (this.state === 'playing') this.updatePlaying(dt);
     else if (this.state === 'intermission') this.updateIntermission(dt);
-    // Visual-only updates run in every state (particles, numbers).
+
     updateParticles(this.particles, dt);
     updateDamageNumbers(this.damageNumbers, dt);
     if (this.shakeT > 0) this.shakeT -= dt;
-    // Low-HP warning tick.
+
     if (this.player && this.player.hp <= FEEL.lowHp && this.player.hp > 0) {
       this.lowHpWarnT -= dt;
       if (this.lowHpWarnT <= 0) { this.lowHpWarnT = FEEL.lowHpWarnEvery; this.audio.play('warn'); }
@@ -234,9 +235,9 @@ export class Game {
     this.interT -= dt;
     const p = this.player;
     this.updateStatues(dt);
-    if ((this.opts.autotest || this.opts.shot) && this.interT < INTERMISSION_TIME - 1) this.botIntermission(); // bot buys 1s in, so the 3-card panel stays readable
+    if ((this.opts.autotest || this.opts.shot) && this.interT < INTERMISSION_TIME - 1) this.botIntermission();
     if (this.interT <= 0) {
-      // Timeout: auto-buy the first affordable offer, else continue bare.
+
       const first = this.offers[0];
       if (first) this.buyUpgrade(first.id);
       this.hideIntermission();
@@ -248,7 +249,7 @@ export class Game {
   updatePlaying(dt) {
     const p = this.player;
     if (p.dead) return;
-    // --- timers ---
+
     this.waveT -= dt;
     p.iframesT = Math.max(0, p.iframesT - dt);
     p.castT = Math.max(0, p.castT - dt);
@@ -260,17 +261,17 @@ export class Game {
       p.starfallWindup -= dt;
       if (p.starfallWindup <= 0) this.fireStarfall();
     }
-    // --- input / bot ---
+
     if (this.opts.autotest || this.opts.shot) this.botStep(dt);
     else this.applyInput(dt);
-    // --- auto bolt ---
+
     p.boltTimer -= dt;
     if (p.boltTimer <= 0) this.tryBolt();
-    // --- spawns ---
+
     const def = WAVES[this.wave - 1];
     if (this.groupsSpawned < def.groups) {
       this.spawnT += dt;
-      // First group at once (normal waves) or at 7s (boss wave).
+
       const firstAt = def.boss ? SPAWN_GROUP_EVERY : 0.01;
       if (this.spawnT >= SPAWN_GROUP_EVERY || (this.groupsSpawned === 0 && this.spawnT >= firstAt)) {
         this.spawnT = 0;
@@ -278,7 +279,7 @@ export class Game {
         this.spawnGroup();
       }
     }
-    // --- entities ---
+
     this.updateEnemies(dt);
     this.updateBoss(dt);
     this.updateProjectiles(dt);
@@ -293,11 +294,11 @@ export class Game {
     this.updateChests(dt);
     this.updatePickups();
     this.updateStatues(dt);
-    // --- wave end ---
+
     if (this.wave < WAVE_COUNT) {
       const allSpawned = this.groupsSpawned >= def.groups;
       if ((allSpawned && this.enemies.length === 0) || this.waveT <= 0) {
-        // Wave clear bonus on remaining seconds (only when cleared by kills).
+
         if (allSpawned && this.enemies.length === 0 && this.waveT > 0) {
           const bonus = Math.round(this.waveT) * LOOT.waveClearPerSecond;
           this.coins += bonus;
@@ -311,8 +312,8 @@ export class Game {
         this.startIntermission();
       }
     } else if (this.waveT <= 0 && !this.boss) {
-      // Wave 8 timer expired with the boss already dead: victory was set
-      // on the kill; this only fires if the boss somehow vanished.
+
+
       this.endRun('victory');
     } else if (this.waveT <= 0 && this.boss) {
       this.endRun('defeat');
@@ -331,22 +332,28 @@ export class Game {
     let mx = ix + kx, my = iy + ky;
     const len = Math.hypot(mx, my);
     if (len > 1) { mx /= len; my /= len; }
-    p.moving = len > 0.05;
-    if (p.moving) {
-      const moved = moveField(p.x, p.y, p.moveRadius, mx * p.speed * dt, my * p.speed * dt);
-      p.x = moved.x; p.y = moved.y;
-      const fl = Math.hypot(mx, my) || 1;
-      p.fx = mx / fl; p.fy = my / fl; // facing unit vector (sim)
-      p.faceAngle = Math.atan2(my, mx); // renderer only
+    const k = Math.min(1, dt * 10);
+    p.vx += (mx * p.speed - p.vx) * k;
+    p.vy += (my * p.speed - p.vy) * k;
+    const moved = moveField(p.x, p.y, p.moveRadius, p.vx * dt, p.vy * dt);
+    p.x = moved.x; p.y = moved.y;
+    const sp = Math.hypot(p.vx, p.vy);
+    p.moving = sp > 8;
+    if (sp > 20) {
+      const dx = p.vx / sp, dy = p.vy / sp;
+      const fk = Math.min(1, dt * 8);
+      p.fx += (dx - p.fx) * fk; p.fy += (dy - p.fy) * fk;
+      const fl = Math.hypot(p.fx, p.fy) || 1;
+      p.fx /= fl; p.fy /= fl;
+      p.faceAngle = Math.atan2(p.fy, p.fx);
     }
-    // Queued skill casts (input.js sets window.__castQueue).
     if (window.__castQueue && window.__castQueue.length) {
       const id = window.__castQueue.shift();
       this.castSkill(id);
     }
   }
 
-  // ---- combat ----
+
   nearestTarget(maxRange, preferBoss = true) {
     const p = this.player;
     let best = null, bestD = maxRange;
@@ -356,7 +363,7 @@ export class Game {
     }
     for (const e of this.enemies) {
       const d = dist(p.x, p.y, e.x, e.y);
-      // The bolt prefers the boss unless an add is very close (as-built).
+
       if (preferBoss && best === this.boss && d > 20) continue;
       if (d < bestD) { best = e; bestD = d; }
     }
@@ -372,7 +379,7 @@ export class Game {
     const d = Math.hypot(dx, dy) || 1;
     const ux = dx / d, uy = dy / d;
     p.fx = ux; p.fy = uy;
-    p.faceAngle = Math.atan2(dy, dx); // renderer only
+    p.faceAngle = Math.atan2(dy, dx);
     p.castT = 0.16;
     this.projectiles.push(createProjectile(
       p.x + ux * 14, p.y + uy * 14,
@@ -387,15 +394,16 @@ export class Game {
     if (this.state !== 'playing' || p.dead || p.starfallWindup > 0) return false;
     const s = SKILLS[id];
     if (!s) return false;
-    if (p.cooldowns[id] > 0 || p.energy < s.cost) return false;
+    if (p.cooldowns[id] > 0) { this.deny = { id, msg: 'Masih cooldown!', until: this.time + 1 }; this.updateHUD(); return false; }
+    if (p.energy < s.cost) { this.deny = { id, msg: `Butuh ${s.cost} energi!`, until: this.time + 1 }; this.updateHUD(); return false; }
     p.energy -= s.cost;
     p.cooldowns[id] = s.cd;
     p.castT = 0.16;
     if (id === 'crescent') {
       const dmg = s.damage + (p.charmCrescent || 0);
       const a = p.faceAngle;
-      this.slash = { x: p.x, y: p.y, angle: a, life: 0.22, maxLife: 0.22 };
-      burstParticles(this.particles, this.vrng, p.x, p.y, '#ffd76a', 12, 150);
+      this.slash = { x: p.x, y: p.y, angle: a, life: 0.3, maxLife: 0.3 };
+      burstParticles(this.particles, this.vrng, p.x, p.y, '#ffd76a', 20, 180);
       let hits = 0;
       for (const e of [...this.enemies]) {
         if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) { this.damageEnemy(e, dmg, 'skill', '#ffd76a'); hits++; }
@@ -413,7 +421,7 @@ export class Game {
       else { ax = p.x + p.fx * 100; ay = p.y + p.fy * 100; }
       const patch = { id: this.embers.length + 1, x: ax, y: ay, r: s.patchRadius, life: s.tickTime, tickT: SKILLS.ember.tickEvery, tick: s.tick + (p.charmEmber || 0), damage: s.damage };
       this.embers.push(patch);
-      burstParticles(this.particles, this.vrng, ax, ay, '#ff8a2a', 14, 130);
+      burstParticles(this.particles, this.vrng, ax, ay, '#ff8a2a', 24, 170);
       for (const e of [...this.enemies]) {
         if (dist(ax, ay, e.x, e.y) <= s.patchRadius + e.radius) this.damageEnemy(e, s.damage, 'skill', '#ff8a2a');
       }
@@ -431,14 +439,15 @@ export class Game {
       for (const e of [...this.enemies]) {
         if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) { e.frozenT = s.freeze; this.damageEnemy(e, s.damage, 'skill', '#7fd4ff'); }
       }
-      burstParticles(this.particles, this.vrng, p.x, p.y, '#7fd4ff', 16, 160);
+      burstParticles(this.particles, this.vrng, p.x, p.y, '#7fd4ff', 28, 200);
+      this.telegraphs.push({ kind: 'flash', x: p.x, y: p.y, r: s.range, life: 0.45, maxLife: 0.45, color: 0x7fd4ff, final: true });
       this.audio.play('skill');
     }
     this.updateHUD();
     return true;
   }
 
-  // ---- backpack: stored items, used on tap (game pauses while open) ----
+
   useBagItem(kind) {
     if (!this.bag || (this.bag[kind] | 0) <= 0 || this.player.dead) return false;
     const p = this.player;
@@ -464,12 +473,13 @@ export class Game {
     const s = SKILLS.starfall;
     const dmg = s.damage + (p.charmStar || 0);
     const cx = p.starfallX, cy = p.starfallY;
-    // Nine gold streaks converge on the blast point (visual).
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2 + 0.4;
+
+    for (let i = 0; i < 16; i++) {
+      const a = (i / 16) * Math.PI * 2 + 0.4;
       this.streaks.push({ x: cx + Math.cos(a) * 60, y: cy + Math.sin(a) * 60, h: 9, t: 0 });
     }
-    burstParticles(this.particles, this.vrng, cx, cy, '#ffd76a', 24, 200);
+    burstParticles(this.particles, this.vrng, cx, cy, '#ffd76a', 48, 260);
+    this.telegraphs.push({ kind: 'flash', x: cx, y: cy, r: s.range, life: 0.5, maxLife: 0.5, color: 0xffd76a, final: true });
     let hitBoss = false;
     for (const e of [...this.enemies]) {
       if (dist(cx, cy, e.x, e.y) <= s.range + e.radius) {
@@ -569,7 +579,7 @@ export class Game {
     }
     if (rest > 0) {
       p.hp -= rest;
-      this.chain = 0; // hit breaks the kill streak
+      this.chain = 0;
       p.iframesT = PLAYER.iframes;
       p.hurtT = 0.25;
       this.shake(FEEL.shakePlayerHit.amp, FEEL.shakePlayerHit.time);
@@ -591,10 +601,10 @@ export class Game {
     this.shakeT = time;
   }
 
-  // ---- enemies ----
+
   updateEnemies(dt) {
     const p = this.player;
-    // Rebuild the spatial hash for separation + targeting.
+
     this.hash.clear();
     for (const e of this.enemies) this.hash.insert(e);
     for (const e of [...this.enemies]) {
@@ -607,14 +617,14 @@ export class Game {
       if (e.type === 'puffcap' || e.type === 'wisp') this.updatePuffcap(e, dt, d);
       else if (e.type === 'tinket') this.updateTinket(e, dt, d);
       else this.updateBrambler(e, dt, d);
-      // No contact damage: enemies hurt only via attacks (hop/bolt/slam).
-      // Glassguard still hurts touching enemies (0.5s per enemy).
+
+
       if (p.shield > 0 && d < e.radius + p.radius && e.contactCd <= 0) {
         e.contactCd = SKILLS.glassguard.contactEvery;
         this.damageEnemy(e, SKILLS.glassguard.contactDamage, 'skill', '#7fe8ff');
       }
     }
-    // Light separation so enemies don't stack exactly.
+
     const list = this.enemies;
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
@@ -633,7 +643,7 @@ export class Game {
     }
   }
 
-  // Open world: walk straight at the target (no walls, no pathfinding).
+
   moveToward(e, tx, ty, dt, speed) {
     const dx = tx - e.x, dy = ty - e.y;
     const d = Math.hypot(dx, dy);
@@ -671,7 +681,7 @@ export class Game {
       if (e.hopT <= 0) {
         e.state = 'chase';
         e.attackCd = def.attackCd;
-        // Hop landing is the attack; the pause before it is the dodge window.
+
         if (dist(e.x, e.y, p.x, p.y) <= e.radius + p.radius + 4) {
           this.damagePlayer(def.damage, 'puffcap');
         }
@@ -693,7 +703,7 @@ export class Game {
     if (e.state === 'aim') {
       e.stateT -= dt;
       e.moving = false;
-      // Aim locks at aim start; the line shows where the bolt goes.
+
       this.setAimTelegraph(e);
       if (e.stateT <= 0) {
         e.state = 'chase';
@@ -740,7 +750,7 @@ export class Game {
     if (e.state === 'root') {
       e.stateT -= dt;
       e.moving = false;
-      // Ring telegraph (visual, rebuilt every step while rooting).
+
       let tg = this.telegraphs.find((t) => t.owner === e && t.kind === 'ring');
       if (!tg) {
         tg = { kind: 'ring', owner: e, x: e.x, y: e.y, r: def.ringRadius, life: def.rootTime, maxLife: def.rootTime, final: false, color: '#e94f62' };
@@ -771,7 +781,7 @@ export class Game {
     }
   }
 
-  // ---- boss ----
+
   updateBoss(dt) {
     const b = this.boss;
     if (!b) return;
@@ -852,7 +862,7 @@ export class Game {
       b.stateT -= dt * speedMul;
       b.telegraphing = true;
       b.moving = false;
-      // Markers follow the player's position at cast time (fixed at start).
+
       if (!b.echoMarks.length) {
         const dx = p.x - b.x, dy = p.y - b.y;
         const d = Math.hypot(dx, dy) || 1;
@@ -903,7 +913,7 @@ export class Game {
     else { b.state = 'echoTel'; b.stateT = BOSS.echoDelay; b.echoMarks = []; }
   }
 
-  // ---- projectiles / loot / embers / telegraphs / streaks ----
+
   updateProjectiles(dt) {
     const p = this.player;
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -916,7 +926,7 @@ export class Game {
       }
       pr.x = nx; pr.y = ny;
       if (pr.kind === 'bolt') {
-        // Player bolt: hits the boss first, then enemies.
+
         if (this.boss && dist(pr.x, pr.y, this.boss.x, this.boss.y) <= this.boss.radius + pr.radius) {
           this.damageBoss(pr.damage, 'bolt');
           this.projectiles.splice(i, 1);
@@ -932,7 +942,7 @@ export class Game {
         }
         if (hit) this.projectiles.splice(i, 1);
       } else {
-        // Enemy projectiles hurt the player.
+
         if (dist(pr.x, pr.y, p.x, p.y) <= p.radius + pr.radius) {
           this.damagePlayer(pr.damage, pr.kind);
           this.projectiles.splice(i, 1);
@@ -947,7 +957,7 @@ export class Game {
       const l = this.loot[i];
       l.life -= dt;
       if (l.life <= 0) { this.loot.splice(i, 1); continue; }
-      // Scatter velocity decays; the field edge just stops the slide.
+
       l.x += l.vx * dt;
       l.y += l.vy * dt;
       l.vx *= 0.9; l.vy *= 0.9;
@@ -990,7 +1000,7 @@ export class Game {
           this.score += 50;
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+50 ⭐', '#ffd76a', 20);
           this.audio.play('coin');
-        } else { // bigheart only: instant heal, the boss reward
+        } else {
           p.hp = Math.min(p.maxHp, p.hp + BOSS.lootHeart);
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, `+${BOSS.lootHeart}`, '#6fe08a', 18);
           this.audio.play('heal');
@@ -1020,12 +1030,12 @@ export class Game {
   }
 
   updateTelegraphs(dt) {
-    // Telegraphs are owned by their attacker states (ring/echo set their
-    // own life); this only ages free-standing ones (none right now) and
-    // drops aim lines whose owner stopped aiming.
     for (let i = this.telegraphs.length - 1; i >= 0; i--) {
       const tg = this.telegraphs[i];
-      if (tg.kind === 'aim') {
+      if (tg.kind === 'flash') {
+        tg.life -= dt;
+        if (tg.life <= 0) this.telegraphs.splice(i, 1);
+      } else if (tg.kind === 'aim') {
         const owner = tg.owner;
         if (!owner || owner.state !== 'aim') this.telegraphs.splice(i, 1);
       }
@@ -1061,8 +1071,8 @@ export class Game {
     }
   }
 
-  // Static field pickups (Genshin-style collectibles): walk over them.
-  // gem = +1 shard (+25), coin pile = +3 coins (+6), heart = +20 HP.
+
+
   updatePickups() {
     const p = this.player;
     for (const pk of this.pickups) {
@@ -1107,7 +1117,7 @@ export class Game {
     }
   }
 
-  // ---- run end ----
+
   endRun(result) {
     if (this.done) return;
     if (result === 'victory') {
@@ -1138,15 +1148,15 @@ export class Game {
     this.updateHUD();
   }
 
-  // ---- the deterministic bot (autotest + shot modes) ----
-  // Telegraph dodge (autotest bot): a unit direction to flee, or null.
-  // Reads the same telegraphs the renderer draws, so the bot reacts to
-  // what a player sees: ring circles (boss ring, brambler slam, boss echo
-  // marks), the boss fan, and tinket aim lines.
+
+
+
+
+
   botDodgeDir() {
     const p = this.player;
     const r = p.radius;
-    // Ring telegraphs: leave the circle (radially away from its centre).
+
     for (const tg of this.telegraphs) {
       if (tg.kind === 'ring') {
         const d = dist(p.x, p.y, tg.x, tg.y);
@@ -1157,7 +1167,7 @@ export class Game {
         }
       }
     }
-    // Boss fan: the shards fly at the player, so strafe sideways.
+
     const boss = this.boss;
     if (boss && boss.state === 'fanTel') {
       const dx = p.x - boss.x, dy = p.y - boss.y;
@@ -1165,7 +1175,7 @@ export class Game {
       const s = this.bot.orbitDir || 1;
       return { x: -(dy / dl) * s, y: (dx / dl) * s };
     }
-    // Tinket aim line: step off the line (perpendicular).
+
     for (const tg of this.telegraphs) {
       if (tg.kind === 'aim') {
         const dx = tg.x1 - tg.x0, dy = tg.y1 - tg.y0;
@@ -1185,8 +1195,8 @@ export class Game {
   botStep(dt) {
     const p = this.player;
     const b = this.bot;
-    // Stuck detection (v3 bot): barely moved for 1.5s -> wander in a
-    // seeded-random direction for 0.7s (escapes corners and wedges).
+
+
     if (Math.hypot(p.x - b.lastX, p.y - b.lastY) < 0.5) b.stuckT += dt;
     else { b.stuckT = 0; b.lastX = p.x; b.lastY = p.y; }
     if (b.stuckT > 1.5) {
@@ -1195,7 +1205,7 @@ export class Game {
       b.wanderT = 0.7;
       b.stuckT = 0;
     }
-    // Telegraph dodge (highest priority): move directly.
+
     let dodged = false;
     let dodge = this.botDodgeDir();
     if (!dodge && b.wanderT > 0) {
@@ -1205,15 +1215,15 @@ export class Game {
     if (dodge) {
       const moved = moveField(p.x, p.y, p.moveRadius, dodge.x * p.speed * dt, dodge.y * p.speed * dt);
       p.x = moved.x; p.y = moved.y;
-      p.fx = dodge.x; p.fy = dodge.y; // dodge dir is already a unit vector
-      p.faceAngle = Math.atan2(dodge.y, dodge.x); // renderer only
+      p.fx = dodge.x; p.fy = dodge.y;
+      p.faceAngle = Math.atan2(dodge.y, dodge.x);
       p.moving = true;
       dodged = true;
     }
-    // Movement target.
+
     let tx = null, ty = null, mode = 'chase';
     if (this.boss) {
-      // Hold a 150-160px ring around the boss, orbiting slowly.
+
       const d = dist(p.x, p.y, this.boss.x, this.boss.y);
       b.orbitT -= dt;
       if (b.orbitT <= 0) { b.orbitDir *= -1; b.orbitT = 2; }
@@ -1221,21 +1231,21 @@ export class Game {
       const dl = Math.hypot(dx, dy) || 1;
       const ux = dx / dl, uy = dy / dl;
       if (d < 140) {
-        // Back away along the radial.
+
         tx = this.boss.x + ux * 175;
         ty = this.boss.y + uy * 175;
       } else if (d > 175) {
         tx = this.boss.x + ux * 155;
         ty = this.boss.y + uy * 155;
       } else {
-        // Orbit tangentially: rotate the radial by +/-0.5 rad.
+
         const s = SIN05 * b.orbitDir;
         tx = this.boss.x + (ux * COS05 - uy * s) * 160;
         ty = this.boss.y + (ux * s + uy * COS05) * 160;
       }
       mode = 'boss';
     } else if (this.enemies.length) {
-      // Nearest enemy; kite inside bolt range, back off when crowded.
+
       let near = null, nd = Infinity;
       for (const e of this.enemies) {
         const d = dist(p.x, p.y, e.x, e.y);
@@ -1251,22 +1261,22 @@ export class Game {
         } else if (nd > 165) {
           tx = near.x; ty = near.y;
         } else {
-          // Strafe: hold range, drift sideways (rotate radial by 0.6 rad).
+
           tx = near.x + (ux * COS06 - uy * SIN06) * 150;
           ty = near.y + (ux * SIN06 + uy * COS06) * 150;
         }
         mode = 'chase';
       }
     } else {
-      // Nothing to fight: drift toward the field centre so the next
-      // spawn group finds the player nearby.
+
+
       tx = FIELD_W / 2;
       ty = FIELD_H / 2;
       mode = 'idle';
     }
-    // Open field: walk straight at the target (no walls, no pathfinding).
+
     if (dodged) {
-      // Already moved directly (dodge / wander); nothing more here.
+
     } else if (tx !== null) {
       const dx = tx - p.x, dy = ty - p.y;
       const d = Math.hypot(dx, dy);
@@ -1274,7 +1284,7 @@ export class Game {
         const moved = moveField(p.x, p.y, p.moveRadius, (dx / d) * p.speed * dt, (dy / d) * p.speed * dt);
         p.x = moved.x; p.y = moved.y;
         p.fx = dx / d; p.fy = dy / d;
-        p.faceAngle = Math.atan2(dy, dx); // renderer only
+        p.faceAngle = Math.atan2(dy, dx);
         p.moving = true;
       } else {
         p.moving = false;
@@ -1283,7 +1293,7 @@ export class Game {
       p.moving = false;
     }
     if (mode !== 'chase' && mode !== 'boss') p.moving = p.moving && true;
-    // Skills: use them when they clearly help.
+
     const nearCount = (r) => this.enemies.filter((e) => dist(p.x, p.y, e.x, e.y) <= r).length
       + (this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= r ? 1 : 0);
     if (p.cooldowns.crescent <= 0 && p.energy >= SKILLS.crescent.cost && nearCount(SKILLS.crescent.range + 10) >= 2) {
@@ -1302,7 +1312,7 @@ export class Game {
     if (SKILLS.frost && p.cooldowns.frost <= 0 && p.energy >= SKILLS.frost.cost && nearCount(SKILLS.frost.range) >= 3) {
       this.castSkill('frost');
     }
-    
+
     if (this.bag.heart > 0 && p.hp < p.maxHp * 0.5) this.useBagItem('heart');
     else if (this.bag.bomb > 0 && nearCount(220) >= 5) this.useBagItem('bomb');
     else if (this.bag.magnet > 0 && this.loot.length >= 8) this.useBagItem('magnet');
@@ -1321,7 +1331,7 @@ export class Game {
     if (pick) this.buyUpgrade(pick.id);
   }
 
-  // ---- HUD + minimap (DOM, kept from v3) ----
+
   updateHUD() {
     const $ = (id) => document.getElementById(id);
     const p = this.player;
@@ -1358,7 +1368,7 @@ export class Game {
         if (bt) bt.textContent = `${BOSS.name} — ${Math.max(0, Math.ceil(this.boss.hp))} / ${this.boss.maxHp}`;
       }
     }
-    // Skill buttons: cooldown sweep + energy state.
+
     for (const id of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
       const btn = document.getElementById(`skill-${id}`);
       if (!btn) continue;
@@ -1366,10 +1376,14 @@ export class Game {
       btn.style.setProperty('--cd', String(cd));
       btn.classList.toggle('ready', cd <= 0 && p.energy >= SKILLS[id].cost);
       btn.classList.toggle('cooling', cd > 0);
+      btn.classList.toggle('poor', cd <= 0 && p.energy < SKILLS[id].cost);
+      btn.classList.toggle('deny', !!(this.deny && this.deny.id === id && this.time < this.deny.until));
     }
+    const denyEl = $('denyText');
+    if (denyEl) denyEl.textContent = this.deny && this.time < this.deny.until ? this.deny.msg : '';
     const scoreEl = $('scoreText');
     if (scoreEl) scoreEl.textContent = `Score ${this.score}`;
-    // Dense HUD: kills + streak, next wave, active build (all sim data).
+
     const fightEl = $('fightText');
     if (fightEl) fightEl.textContent = `⚔️ ${this.kills} KILLS${this.chain >= 2 ? ` · 🔥 CHAIN x${this.chain}` : ''}`;
     const nextEl = $('nextText');
@@ -1391,27 +1405,27 @@ export class Game {
     const cv = document.getElementById('minimap');
     if (!cv) return;
     const ctx = cv.getContext('2d');
-    const S = cv.width; // square canvas
-    // Uniform scale (the field is 2400x1800, 4:3): keep proportions,
-    // centre the shorter side vertically.
+    const S = cv.width;
+
+
     const s = S / FIELD_W;
     const offY = (S - FIELD_H * s) / 2;
     const px = (x) => x * s;
     const py = (y) => offY + y * s;
     ctx.clearRect(0, 0, S, S);
-    // Round clip.
+
     ctx.save();
     ctx.beginPath();
     ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
     ctx.clip();
     const pal = AREAS[this.area];
-    // Fill the whole circle with ground colour first: the field is 4:3
-    // inside a round map, so the bands above/below it must read as
-    // terrain, never as black empty space.
+
+
+
     ctx.fillStyle = pal.floor;
     ctx.fillRect(0, 0, S, S);
-    // Open field: the whole map is terrain — coarse checker for texture.
-    const cell = 150; // px per checker cell, world scale
+
+    const cell = 150;
     for (let gy = 0; gy < FIELD_H / cell; gy++) {
       for (let gx = 0; gx < FIELD_W / cell; gx++) {
         ctx.fillStyle = (gx + gy) % 2 ? pal.floor : pal.floorAlt;
@@ -1439,7 +1453,7 @@ export class Game {
     ctx.restore();
   }
 
-  // ---- panels (DOM) ----
+
   showIntermission() {
     const panel = document.getElementById('interPanel');
     const row = document.getElementById('offerRow');
@@ -1490,7 +1504,7 @@ export class Game {
     if (panel) panel.classList.add('hidden');
   }
 
-  // ---- shot conditions (screenshot hooks) ----
+
   shotConditionMet() {
     const shot = this.opts.shot;
     if (!shot) return false;
@@ -1498,9 +1512,9 @@ export class Game {
     if (shot === 'intermission') return this.state === 'intermission' && this.offers.length >= 2;
     if (this.state !== 'playing') return false;
     if (shot === 'combat') {
-      // v7: mid-wave only (waveT counts down from 50, so <= 25 means at
-      // least 25 s elapsed) — the shot must show a crowded field, not the
-      // first few enemies of a fresh wave.
+
+
+
       return this.wave >= 1 && this.wave <= 3 && this.waveT <= 25 && this.enemies.length >= 8 && this.loot.length >= 1;
     }
     if (shot === 'cinder') {
@@ -1509,13 +1523,13 @@ export class Game {
     if (shot === 'boss') {
       if (this.wave !== 8 || !this.boss) return false;
       if (this.boss.hp >= this.boss.maxHp * 0.5) return false;
-      if (this.player.y <= this.boss.y) return false; // Neri below the boss
+      if (this.player.y <= this.boss.y) return false;
       return this.telegraphs.some((t) => t.owner === this.boss && t.kind === 'ring');
     }
     return false;
   }
 
-  // If a shot run ends before its condition, restart on the next seed.
+
   maybeRestartShot() {
     if (!this.opts.shot || this.shotReady) return false;
     if (this.done && this.shotSeedTries < 5) {

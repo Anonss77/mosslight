@@ -1,13 +1,13 @@
-// Mosslight — open field (2400x1800): no dungeon, walls, or void. Enemies
-// spawn at the camera edge and walk straight at Neri; decor has no
-// Edge is a tree line, never a wall. Deterministic (mulberry32).
+
+
+
 
 import { FIELD_W, FIELD_H } from './config.js';
 import { makeRng } from './random.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
-// FNV-1a hash of the field scatter (determinism summary).
+
 export function hashField(f) {
   let h = 0x811c9dc5;
   const mix = (n) => {
@@ -20,24 +20,24 @@ export function hashField(f) {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-// Clamp a point inside the field (soft edge, no wall).
+
 export function clampField(x, y, r) {
   return { x: clamp(x, r, FIELD_W - r), y: clamp(y, r, FIELD_H - r) };
 }
 
-// Move by (dx, dy), clamped to the field (no walls to slide along).
+
 export function moveField(x, y, r, dx, dy) {
   return clampField(x + dx, y + dy, r);
 }
 
-// Spawn point: a random direction, minDist..minDist+260 px from the player.
+
 export function spawnPoint(rng, px, py, minDist) {
   const u = rng.unit();
   const d = minDist + rng.range(0, 260);
   return clampField(px + u.x * d, py + u.y * d, 24);
 }
 
-// Scatter n points in the field, at least minR px from the centre spawn.
+
 function scatter(rng, n, minR) {
   const cx = FIELD_W / 2, cy = FIELD_H / 2;
   const out = [];
@@ -53,7 +53,7 @@ function scatter(rng, n, minR) {
   return out;
 }
 
-// Chests 3, statues 3, gems 8, coin piles 10, hearts 6.
+
 export function generateField(seed) {
   const rng = makeRng(seed);
   const chests = scatter(rng, 3, 220).map((p) => ({ ...p, opened: false }));

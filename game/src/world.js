@@ -1,8 +1,8 @@
-// Mosslight v6 — 3D world: renderer, camera, lights, open field, props,
-// sync sim->meshes. Sim in px (2400x1800 open field); 1 unit=16px.
-// Decor uses its own visual stream, re-seeded per area bake: the render
-// never shifts gameplay. No walls, no rooms, no void — the ground fills
-// every frame and the field edge is a dense tree line.
+
+
+
+
+
 
 import * as THREE from 'three';
 import { TILE, FIELD_W, FIELD_H, AREAS, CAM } from './config.js';
@@ -17,11 +17,11 @@ import {
 } from './models.js';
 import { GLTFLoader } from '../vendor/loaders/GLTFLoader.js';
 
-const PX = 1 / TILE; // px -> world units
+const PX = 1 / TILE;
 const toX = (px) => px * PX;
 const toZ = (py) => py * PX;
 
-// Deterministic per-tile speckle offsets from a tile hash (no RNG calls).
+
 function tileHash(tx, ty) {
   let h = (tx * 374761393 + ty * 668265263) | 0;
   h = (h ^ (h >> 13)) | 0;
@@ -48,9 +48,9 @@ export function createWorld(canvas) {
   let chestMeshes = [];
   let statueMeshes = [];
 
-  // v7: gradient sky — at the 38 deg camera the top of the frame shows
-  // sky when Neri is near the north edge; a flat colour read as an empty
-  // brown band (Cinder), a vertical gradient reads as sky instead.
+
+
+
   let skyTex = null;
   function shade(hex, f) {
     const n = parseInt(hex.slice(1), 16);
@@ -82,19 +82,19 @@ export function createWorld(canvas) {
     const ctx = cv.getContext('2d');
     const vrng = makeRng(0x51ab3f ^ (area * 7919 + 13));
     const sx = 1200 / FIELD_W, sy = 900 / FIELD_H;
-    // Checker terrain, 16px world tiles.
+
     for (let ty = 0; ty < FIELD_H / TILE; ty++) {
       for (let tx = 0; tx < FIELD_W / TILE; tx++) {
         ctx.fillStyle = (tx + ty) % 2 === 0 ? pal.floor : pal.floorAlt;
         ctx.fillRect(tx * TILE * sx, ty * TILE * sy, TILE * sx + 0.5, TILE * sy + 0.5);
       }
     }
-    // Speckle.
+
     ctx.fillStyle = pal.highlight;
     ctx.globalAlpha = 0.35;
     for (let i = 0; i < 1600; i++) ctx.fillRect((i * 53) % 1200, (i * 97) % 900, 2, 2);
     ctx.globalAlpha = 1;
-    // Area features, seeded (same seed every bake -> same layout).
+
     if (area === 0) {
       for (let i = 0; i < 6; i++) {
         ctx.fillStyle = pal.water;
@@ -149,7 +149,7 @@ export function createWorld(canvas) {
     }
   }
 
-  // ---- props (visual only, rebuilt per area from a fixed seed) ----
+
   const PROP_KINDS = [
     ['flower', 'tuft', 'pond', 'mushroom', 'tree', 'bush', 'stump'],
     ['anvil', 'gear', 'furnace', 'crystal', 'rock', 'barrel', 'crate'],
@@ -164,7 +164,7 @@ export function createWorld(canvas) {
     const FW = FIELD_W / TILE, FH = FIELD_H / TILE;
     const m4 = new THREE.Matrix4();
     const q = new THREE.Quaternion(), pv = new THREE.Vector3(), sv = new THREE.Vector3();
-    // Scattered props across the whole field (no collision).
+
     for (let i = 0; i < 240; i++) {
       const { group } = buildProp(area, vrng.pick(kinds));
       group.position.set(vrng.range(3, FW - 3), 0, vrng.range(3, FH - 3));
@@ -172,7 +172,7 @@ export function createWorld(canvas) {
       group.scale.setScalar(vrng.range(0.85, 1.3));
       propGroup.add(group);
     }
-    // Grass tufts: one instanced mesh, 1600 tufts x 3 chunky blades.
+
     const tuftGeo = new THREE.ConeGeometry(0.13, 0.85, 5);
     const tuftMat = new THREE.MeshLambertMaterial({ color: area === 2 ? 0xa7e760 : 0x5da85a });
     const TUFTS = 1600;
@@ -187,7 +187,7 @@ export function createWorld(canvas) {
     }
     tufts.instanceMatrix.needsUpdate = true;
     propGroup.add(tufts);
-    // Border trees: the field ends in trees, never a wall.
+
     const per = Math.floor((FW + FH) * 2 / 2.4);
     const trunkGeo = new THREE.CylinderGeometry(0.14, 0.22, 0.9, 7);
     const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6a452c });
@@ -197,15 +197,15 @@ export function createWorld(canvas) {
     const canopies = new THREE.InstancedMesh(canopyGeo, canopyMat, per);
     for (let i = 0; i < per; i++) {
       const t = (i / per) * (FW + FH) * 2;
-      // Jittered: a forest edge, not a fence — uneven depth and spacing.
-      const jt = vrng.range(-0.9, 0.9); // along the edge
-      const jd = vrng.range(-0.3, 2.4); // depth into the field
+
+      const jt = vrng.range(-0.9, 0.9);
+      const jd = vrng.range(-0.3, 2.4);
       let x, z;
       if (t < FW) { x = t + jt; z = 0.6 + jd; }
       else if (t < FW + FH) { x = FW - 0.6 - jd; z = t - FW + jt; }
       else if (t < FW * 2 + FH) { x = FW - (t - FW - FH) + jt; z = FH - 0.6 - jd; }
       else { x = 0.6 + jd; z = FH - (t - FW * 2 - FH) + jt; }
-      // v7: north row 2.2x taller — a forest silhouette, not a flat band.
+
       const s = (0.8 + tileHash(i * 3, area) * 1.2) * (t < FW ? 2.2 : 1);
       m4.compose(pv.set(x, 0.45 * s, z), q, sv.set(s, s, s));
       trunks.setMatrixAt(i, m4);
@@ -234,24 +234,24 @@ export function createWorld(canvas) {
     });
   }
 
-  // ---- entity mesh pools ----
-  const enemyMeshes = new Map(); // id -> {group, parts, type}
-  const hpBars = new Map(); // enemy id -> {group, fill, fillW}; v7: small HP
-  // bar above every enemy, billboarded, so enemies read at a glance.
+
+  const enemyMeshes = new Map();
+  const hpBars = new Map();
+
   let bossHpBar = null;
-  const lootMeshes = new Map(); // id -> {group, parts, kind}
-  const pickupMeshes = new Map(); // id -> {group, parts, kind}
+  const lootMeshes = new Map();
+  const pickupMeshes = new Map();
   const projPool = [];
   const particlePool = [];
   const damagePool = [];
   const telegraphPool = [];
   const aimPool = [];
-  let neri = null; 
+  let neri = null;
   let neriLoading = null;
   let bossMesh = null;
   let slashMesh = null;
   let shieldMesh = null;
-  let emberMeshes = new Map(); // patch id -> group
+  let emberMeshes = new Map();
   const streakPool = [];
 
   async function loadNeri() {
@@ -400,9 +400,9 @@ export function createWorld(canvas) {
     d.tex.needsUpdate = true;
   }
 
-  // v7: enemy HP bar — dark backing + fill that shrinks from the right.
-  // The group is billboarded in sync() (quaternion copied from the camera),
-  // so its local +x is screen-right and the fill stays left-anchored.
+
+
+
   function makeHpBar(w) {
     const g = new THREE.Group();
     const bg = new THREE.Mesh(
@@ -445,7 +445,7 @@ export function createWorld(canvas) {
     return t;
   }
 
-  // ---- public API ----
+
   function setField(f) {
     field = f;
     area = 0;
@@ -477,7 +477,15 @@ export function createWorld(canvas) {
       pg.position.set(toX(p.x), 0, toZ(p.y));
       pg.rotation.y = Math.PI / 2 - (p.faceAngle || 0) + neri.yawOffset;
       const a = neri.actions;
-      const loop = p.moving ? 'walk' : 'idle';
+      const mvx = p.x - (neri.px ?? p.x), mvy = p.y - (neri.py ?? p.y);
+      const v = dt > 0 ? Math.hypot(mvx, mvy) / dt : 0;
+      neri.px = p.x; neri.py = p.y;
+      const loop = !p.moving ? 'idle' : (v > 110 ? 'run' : 'walk');
+      neri.dustT = (neri.dustT || 0) - dt;
+      if (p.moving && v > 60 && neri.dustT <= 0) {
+        neri.dustT = 0.18;
+        sim.particles.push({ x: p.x, y: p.y + 10, z: 0.25, vx: 0, vy: 0, vz: 18, life: 0.4, maxLife: 0.4, color: '#d8c9a3', rot: 0 });
+      }
       if (p.hurtT > 0 && neri.prevHurt <= 0 && a.hurt) neri.oneshot = a.hurt;
       neri.prevHurt = p.hurtT;
       for (const k of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
@@ -510,18 +518,17 @@ export function createWorld(canvas) {
       }
     }
 
-
     if (p.shield > 0) {
       if (!shieldMesh) {
         shieldMesh = new THREE.Mesh(
-          new THREE.SphereGeometry(2.0, 18, 12),
+          new THREE.SphereGeometry(2.4, 18, 12),
           new THREE.MeshBasicMaterial({ color: 0x7fd4ff, transparent: true, opacity: 0.28, depthWrite: false }),
         );
         scene.add(shieldMesh);
       }
       shieldMesh.visible = true;
       shieldMesh.position.set(toX(p.x), 1.2, toZ(p.y));
-      shieldMesh.material.opacity = 0.22 + Math.sin(sim.time * 6) * 0.08;
+      shieldMesh.material.opacity = 0.32 + Math.sin(sim.time * 6) * 0.08;
     } else if (shieldMesh) {
       shieldMesh.visible = false;
     }
@@ -556,7 +563,7 @@ export function createWorld(canvas) {
       } else {
         em.group.traverse((o) => { if (o.isMesh && o.material.emissive) o.material.emissive.setHex(0x000000); });
       }
-      // v7 HP bar above the head, billboarded to the camera.
+
       let hb = hpBars.get(e.id);
       if (!hb) { hb = makeHpBar(1.15); hpBars.set(e.id, hb); }
       hb.group.position.set(toX(e.x), 1.95, toZ(e.y));
@@ -615,7 +622,7 @@ export function createWorld(canvas) {
       if (!seenLoot.has(id)) { scene.remove(lm.group); lootMeshes.delete(id); }
     }
 
-    // Static field pickups (gem / coin pile / heart): bob and spin.
+
     const seenPickups = new Set();
     for (const pk of sim.pickups || []) {
       if (pk.taken) continue;
@@ -728,7 +735,7 @@ export function createWorld(canvas) {
       slashMesh.group.position.set(toX(s.x), 0.7, toZ(s.y));
       slashMesh.group.rotation.y = s.angle;
       const k = 1 - s.life / s.maxLife;
-      slashMesh.group.scale.setScalar(0.9 + k * 1.6);
+      slashMesh.group.scale.setScalar(1.15 + k * 2.1);
       slashMesh.parts.arc.material.opacity = 0.95 * (s.life / s.maxLife);
       slashMesh.parts.glow.material.opacity = 0.45 * (s.life / s.maxLife);
     } else if (slashMesh) {
@@ -760,7 +767,7 @@ export function createWorld(canvas) {
       let slot = streakPool[si];
       if (!slot) {
         slot = buildStreak();
-        slot.group.scale.set(1.8, 2.2, 1.8);
+        slot.group.scale.set(2.6, 3.0, 2.6);
         scene.add(slot.group);
         streakPool.push(slot);
       }
@@ -769,14 +776,14 @@ export function createWorld(canvas) {
       si++;
     }
 
-    // --- camera: follow Neri, tilted 55 deg, with deterministic shake ---
-    // The field is 150x112.5 units; the camera target stays well inside
-    // it, so the frame is always ground — never void.
+
+
+
     const FW = FIELD_W / TILE, FH = FIELD_H / TILE;
     let tx = toX(p.x);
     const tz = Math.max(9, Math.min(FH - 9, toZ(p.y)));
-    // The left clamp is relaxed in title state (Neri stands right of the
-    // centred title panel).
+
+
     if (sim.state === 'title') tx -= CAM.titleShiftX;
     tx = Math.max(sim.state === 'title' ? FW / 2 - 24 : 14, Math.min(FW - 14, tx));
     const tilt = (CAM.tiltDeg * Math.PI) / 180;

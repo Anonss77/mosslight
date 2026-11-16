@@ -1,5 +1,5 @@
-// Mosslight — deterministic RNG (Mulberry32). No Math.random anywhere.
-// One stream per purpose: run stream for gameplay, visual stream for decor.
+
+
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -11,20 +11,20 @@ export function mulberry32(seed) {
   };
 }
 
-// Small helpers over a stream. All deterministic.
+
 export function makeRng(seed) {
   const next = mulberry32(seed);
   return {
     next,
-    // float in [0, 1)
+
     f() { return next(); },
-    // float in [min, max)
+
     range(min, max) { return min + next() * (max - min); },
-    // integer in [min, max] inclusive
+
     int(min, max) { return min + Math.floor(next() * (max - min + 1)); },
-    // pick one element
+
     pick(arr) { return arr[Math.floor(next() * arr.length)]; },
-    // Fisher-Yates shuffle, in place, deterministic
+
     shuffle(arr) {
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(next() * (i + 1));
@@ -32,12 +32,12 @@ export function makeRng(seed) {
       }
       return arr;
     },
-    // true with probability p
+
     chance(p) { return next() < p; },
-    // random unit vector (deterministic: sqrt only, no trig — see the
-    // note in config.js). Two stream draws, direction uniform enough
-    // for spawns and wander; never exactly (0,0) in practice, and the
-    // || 1 guard covers it.
+
+
+
+
     unit() {
       const x = this.range(-1, 1), y = this.range(-1, 1);
       const l = Math.sqrt(x * x + y * y) || 1;

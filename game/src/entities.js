@@ -1,10 +1,10 @@
-// Mosslight — sim entities: data factories, spatial hash, visual helpers.
-// Numbers from config.js; gameplay RNG from game.js; visual RNG for jitter.
-// No rendering here — world.js turns these objects into meshes.
+
+
+
 
 import { PLAYER, SKILLS, ENEMIES, BOSS, LOOT, FEEL } from './config.js';
 
-// ---- spatial hash (cell 64 px; lookups only touch neighbouring cells) ----
+
 export class SpatialHash {
   constructor(cell = 64) {
     this.cell = cell;
@@ -19,7 +19,7 @@ export class SpatialHash {
     if (!bucket) { bucket = []; this.map.set(k, bucket); }
     bucket.push(e);
   }
-  // Every entity whose cell overlaps the circle (x, y, r).
+
   query(x, y, r, out = []) {
     const x0 = Math.floor((x - r) / this.cell), x1 = Math.floor((x + r) / this.cell);
     const y0 = Math.floor((y - r) / this.cell), y1 = Math.floor((y + r) / this.cell);
@@ -33,7 +33,7 @@ export class SpatialHash {
   }
 }
 
-// ---- factories (plain data, no methods) ----
+
 let nextId = 1;
 export function freshIds() { nextId = 1; }
 function nid() { return nextId++; }
@@ -51,12 +51,10 @@ export function createPlayer(x, y) {
     iframesT: 0, castT: 0, hurtT: 0,
     starfallWindup: 0, starfallX: 0, starfallY: 0,
     upgrades: { wick: 0, hands: 0, thread: 0, cape: 0, charm: 0 },
-    faceAngle: Math.PI / 2, moving: false, dead: false, // face south
-    // (toward the camera) at spawn: the title pose shows Neri front-on.
-    // fx/fy is the facing UNIT VECTOR (deterministic, trig-free — the sim
-    // aims skills from it; faceAngle stays for the renderer only).
+    faceAngle: Math.PI / 2, moving: false, dead: false,
+    vx: 0, vy: 0, dustT: 0,
     fx: 0, fy: 1,
-    joyX: 0, joyY: 0, // current joystick vector (-1..1)
+    joyX: 0, joyY: 0,
   };
 }
 
@@ -71,7 +69,7 @@ export function createEnemy(type, x, y, hpMul, spMul) {
     state: 'chase', stateT: 0,
     attackCd: 0, aimX: 0, aimY: 0,
     hopT: 0, hopFromX: 0, hopFromY: 0, hopToX: 0, hopToY: 0,
-    contactCd: 0, // glassguard contact-damage throttle per enemy
+    contactCd: 0,
     faceAngle: 0, moving: false, flashT: 0,
   };
 }
@@ -82,7 +80,7 @@ export function createBoss(x, y) {
     hp: BOSS.hp, maxHp: BOSS.hp,
     speed: BOSS.speed,
     radius: BOSS.radius, moveRadius: BOSS.moveRadius,
-    state: 'chase', stateT: 1.2, // first pattern after 1.2s, not instantly on spawn
+    state: 'chase', stateT: 1.2,
     patternIdx: 0, phase: 1,
     faceAngle: 0, moving: false, flashT: 0, telegraphing: false,
     ringX: 0, ringY: 0,
@@ -103,7 +101,7 @@ export function createLoot(kind, x, y, rng) {
   };
 }
 
-// ---- visual objects (driven by game events, rendered by world.js) ----
+
 export function burstParticles(list, vrng, x, y, color, count, speed = 90) {
   for (let i = 0; i < count; i++) {
     const a = vrng.range(0, Math.PI * 2);
@@ -125,14 +123,14 @@ export function updateParticles(list, dt) {
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.z += p.vz * dt;
-    p.vz -= 260 * dt; // gravity pulls sparks back to the floor
+    p.vz -= 260 * dt;
     if (p.z < 0) { p.z = 0; p.vz = 0; }
     p.vx *= 0.94;
     p.vy *= 0.94;
   }
 }
 
-// Damage numbers stagger -9/0/+9 px so adjacent hits never merge.
+
 let staggerIdx = 0;
 export function resetStagger() { staggerIdx = 0; }
 export function addDamageNumber(list, x, y, text, color, sizePx) {

@@ -1,5 +1,5 @@
-// Mosslight — input. Keyboard (WASD/arrows, Q/E/R/F + J/K/L/Space skills,
-// B bag, Esc pause) + touch joystick + skill buttons.
+
+
 
 export class Input {
   constructor() {
@@ -7,8 +7,8 @@ export class Input {
     if (!window.__joy) window.__joy = { x: 0, y: 0 };
     if (!window.__castQueue) window.__castQueue = [];
     this.joy = { active: false, id: -1 };
-    this.onPause = null; // main.js sets this
-    this.onBag = null; // main.js sets this (B opens the backpack)
+    this.onPause = null;
+    this.onBag = null;
     this.bindKeyboard();
   }
 
@@ -29,9 +29,9 @@ export class Input {
     window.addEventListener('blur', () => window.__keys.clear());
   }
 
-  // Wire the DOM joystick (outer ring + thumb). Movement follows the
-  // pointer inside the ring, up to 31px of thumb travel (scaled with
-  // the rendered size, since the stage is scaled to fit the screen).
+
+
+
   bindJoystick(joyEl, thumbEl) {
     const rect = () => joyEl.getBoundingClientRect();
     const setFromEvent = (e) => {
@@ -49,7 +49,7 @@ export class Input {
       e.preventDefault();
       this.joy.active = true;
       this.joy.id = e.pointerId;
-      try { joyEl.setPointerCapture(e.pointerId); } catch { /* already released */ }
+      try { joyEl.setPointerCapture(e.pointerId); } catch {  }
       setFromEvent(e);
     });
     joyEl.addEventListener('pointermove', (e) => {
@@ -65,7 +65,7 @@ export class Input {
     joyEl.addEventListener('pointercancel', end);
   }
 
-  // Wire one skill button element to queue its skill on press.
+
   bindSkillButton(el, skillId) {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
