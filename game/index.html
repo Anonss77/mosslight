@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Mosslight — a bright dungeon survival</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #101a14; }
+  body { display: flex; align-items: center; justify-content: center; }
+  #stage { position: relative; width: 1280px; height: 720px; flex: none; transform-origin: center center; }
+  #game { position: absolute; inset: 0; width: 1280px; height: 720px; display: block; touch-action: none; image-rendering: pixelated; }
+  .hidden { display: none !important; }
+  /* ---------- HUD ---------- */
+  #hud { position: absolute; inset: 0; pointer-events: none; font-family: monospace; color: #fff;
+    text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; }
+  .bar { position: absolute; background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.85); border-radius: 6px; overflow: hidden; }
+  .bar > div { height: 100%; transition: width 0.12s linear; }
+  #hpBar { left: 24px; top: 20px; width: 240px; height: 20px; }
+  #hpFill { background: linear-gradient(#FF6B5E, #D93A2E); width: 100%; }
+  #hpBar.low { animation: pulse 0.5s infinite alternate; }
+  @keyframes pulse { from { border-color: #fff; } to { border-color: #ff2222; } }
+  #hpText { position: absolute; left: 272px; top: 22px; font-size: 16px; font-weight: bold; }
+  #energyBar { left: 24px; top: 48px; width: 180px; height: 12px; }
+  #energyFill { background: linear-gradient(#7FD4FF, #2A9BD8); width: 100%; }
+  #waveText { position: absolute; left: 0; right: 0; top: 12px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 2px; }
+  #timerText { position: absolute; left: 0; right: 0; top: 46px; text-align: center; font-size: 16px; }
+  #areaText { position: absolute; left: 0; right: 0; top: 68px; text-align: center; font-size: 13px; opacity: 0.9; }
+  #coinText { position: absolute; right: 24px; top: 20px; font-size: 18px; font-weight: bold; text-align: right; }
+  #minimap { position: absolute; right: 24px; top: 52px; width: 152px; height: 96px; border: 2px solid rgba(255,255,255,0.7); border-radius: 6px; background: rgba(0,0,0,0.35); }
+  #bossBar { position: absolute; left: 50%; top: 96px; transform: translateX(-50%); width: 480px; text-align: center; }
+  #bossName { font-size: 15px; font-weight: bold; margin-bottom: 3px; }
+  #bossTrack { height: 14px; background: rgba(0,0,0,0.55); border: 2px solid #FFD76A; border-radius: 6px; overflow: hidden; }
+  #bossFill { height: 100%; background: linear-gradient(#FFD76A, #E94F62); width: 100%; transition: width 0.15s linear; }
+  /* ---------- joystick ---------- */
+  #joystick { position: absolute; left: 40px; top: 564px; width: 112px; height: 112px; border-radius: 50%;
+    background: rgba(10, 20, 14, 0.45); border: 3px solid rgba(255,255,255,0.55); pointer-events: auto; touch-action: none; }
+  #joyThumb { position: absolute; left: 32px; top: 32px; width: 48px; height: 48px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #B9D9FF 0%, #4A7FD8 45%, #234F8A 100%);
+    border: 2px solid rgba(255,255,255,0.8); box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+  /* ---------- skill buttons ---------- */
+  .skill { position: absolute; border-radius: 50%; pointer-events: auto; cursor: pointer; overflow: hidden;
+    background: radial-gradient(circle at 35% 30%, #4A4A58 0%, #23232E 70%);
+    border: 3px solid rgba(255,255,255,0.75); box-shadow: 0 4px 12px rgba(0,0,0,0.55); touch-action: none; }
+  .skill svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .skill .cd { position: absolute; left: 0; right: 0; top: 0; height: 0%; background: rgba(0,0,0,0.6); }
+  .skill .key { position: absolute; right: -2px; top: -2px; min-width: 18px; height: 18px; line-height: 18px; text-align: center;
+    background: #F5D45A; color: #1A1A1A; border-radius: 9px; font-size: 11px; font-weight: bold; padding: 0 3px; text-shadow: none; }
+  .skill.cant { filter: grayscale(0.6) brightness(0.65); }
+  .skill.ready { animation: glow 0.8s infinite alternate; border-color: #FFD76A; }
+  @keyframes glow { from { box-shadow: 0 0 6px #FFD76A; } to { box-shadow: 0 0 22px #FFD76A; } }
+  #skill-crescent { left: 1018px; top: 596px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FF8A7A 0%, #D93A2E 70%); }
+  #skill-ember { left: 1092px; top: 538px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FFB35E 0%, #E86A1A 70%); }
+  #skill-glassguard { left: 1158px; top: 596px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #9FE0FF 0%, #2A7FB8 70%); }
+  #skill-starfall { left: 1084px; top: 624px; width: 72px; height: 72px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #B8860B 70%); }
+  #muteBtn { position: absolute; right: 24px; top: 156px; width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(0,0,0,0.5); color: #fff; border: 2px solid rgba(255,255,255,0.6); font-size: 18px; cursor: pointer; pointer-events: auto; }
+  /* ---------- panels ---------- */
+  .panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center;
+    background: rgba(16, 32, 22, 0.92); border: 3px solid #F5D45A; border-radius: 16px; padding: 28px 36px;
+    font-family: monospace; color: #FFF3C4; box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+  .panel h1 { margin: 0 0 6px; font-size: 54px; letter-spacing: 6px; color: #FFD76A; text-shadow: 3px 3px 0 #173F35; }
+  .panel h2 { margin: 0 0 14px; font-size: 26px; color: #9BD96A; }
+  .panel p { font-size: 15px; line-height: 1.5; margin: 8px 0; }
+  .panel button { font-family: monospace; font-size: 18px; font-weight: bold; padding: 12px 28px; margin: 8px 6px 0;
+    background: #F5D45A; color: #173F35; border: 3px solid #FFF3C4; border-radius: 10px; cursor: pointer; }
+  .panel button:hover { background: #FFE9A8; }
+  .panel button.ghost { background: transparent; color: #FFF3C4; border-color: #9BD96A; }
+  #seedInput { font-family: monospace; font-size: 17px; padding: 10px 12px; width: 170px; text-align: center;
+    background: #173F35; color: #FFF3C4; border: 2px solid #9BD96A; border-radius: 8px; }
+  #titleHero { width: 96px; height: 96px; image-rendering: pixelated; }
+  #titleMoth { width: 48px; height: 48px; image-rendering: pixelated; vertical-align: top; margin-top: 20px; }
+  .tiles { display: flex; gap: 10px; justify-content: center; margin: 14px 0 4px; }
+  .tile { width: 120px; padding: 8px 6px; border-radius: 8px; font-size: 12px; font-weight: bold; color: #fff; text-shadow: 1px 1px 0 #000; }
+  #intermission { width: 620px; }
+  #offers { display: flex; gap: 12px; justify-content: center; margin: 14px 0; }
+  .offer { display: block; width: 180px; padding: 14px 10px; background: #246B50; border: 2px solid #9BD96A;
+    border-radius: 10px; color: #FFF3C4; font-family: monospace; cursor: pointer; text-align: center; }
+  .offer:hover { background: #2E8563; }
+  .offerIcon { font-size: 30px; }
+  .offerName { font-size: 16px; font-weight: bold; margin: 6px 0; color: #FFD76A; }
+  .offerDesc { font-size: 12px; line-height: 1.4; min-height: 34px; }
+  .offerCost { font-size: 15px; font-weight: bold; margin-top: 8px; }
+  .offerNone { font-size: 14px; padding: 16px; }
+  #resultScore { font-size: 26px; font-weight: bold; color: #FFD76A; }
+  #resultBest, #resultWave { font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" width="1280" height="720" aria-label="Mosslight: guide Neri the lantern courier through the dungeon, survive 8 waves and defeat the Gloam Bell"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="hpBar" class="bar"><div id="hpFill"></div></div>
+    <div id="hpText">100 / 100</div>
+    <div id="energyBar" class="bar"><div id="energyFill"></div></div>
+    <div id="waveText">WAVE 1 / 8</div>
+    <div id="timerText">0:50</div>
+    <div id="areaText">Bloomroot Warrens</div>
+    <div id="coinText">0 💠 0</div>
+    <canvas id="minimap" width="152" height="96"></canvas>
+    <div id="bossBar" class="hidden">
+      <div id="bossName">The Gloam Bell</div>
+      <div id="bossTrack"><div id="bossFill"></div></div>
+    </div>
+    <div id="joystick"><div id="joyThumb"></div></div>
+    <div class="skill" id="skill-crescent" title="Crescent Cut (J)">
+      <svg viewBox="0 0 32 32"><path d="M21 4 A13 13 0 1 0 21 28 A10 10 0 1 1 21 4 Z" fill="#FFFFFF"/></svg>
+      <div class="cd"></div><div class="key">J</div>
+    </div>
+    <div class="skill" id="skill-ember" title="Ember Bloom (K)">
+      <svg viewBox="0 0 32 32"><path d="M16 3 C18 8 25 11 25 19 A9 9 0 1 1 7 19 C7 14 11 12 12 8 C13 10 14 11 15 10 C15 7 15 5 16 3 Z" fill="#FF8A2A"/><path d="M16 16 C17 18 20 19 20 22 A4 4 0 1 1 12 22 C12 20 14 18 16 16 Z" fill="#FFD76A"/></svg>
+      <div class="cd"></div><div class="key">K</div>
+    </div>
+    <div class="skill" id="skill-glassguard" title="Glassguard (L)">
+      <svg viewBox="0 0 32 32"><path d="M16 3 L27 7 V16 C27 23 22 27 16 29 C10 27 5 23 5 16 V7 Z" fill="#7FD4FF"/><path d="M16 3 L27 7 V16 C27 20 25 24 22 26 L16 10 Z" fill="#B9F0F2" opacity="0.7"/><path d="M16 8 L21 10 V16 C21 20 19 23 16 24 C13 23 11 20 11 16 V10 Z" fill="#EAFBFF"/></svg>
+      <div class="cd"></div><div class="key">L</div>
+    </div>
+    <div class="skill" id="skill-starfall" title="Starfall (Space)">
+      <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="#B9A9F0" stroke-width="2.5"/><path d="M16 2 L18.5 13.5 L30 16 L18.5 18.5 L16 30 L13.5 18.5 L2 16 L13.5 13.5 Z" fill="#FFD76A"/></svg>
+      <div class="cd"></div><div class="key">␣</div>
+    </div>
+    <button id="muteBtn" title="Mute">🔊</button>
+  </div>
+
+  <div id="title" class="panel">
+    <h1>MOSSLIGHT</h1>
+    <h2>A bright dungeon survival</h2>
+    <div><img id="titleHero" alt="Neri, the lantern courier"><img id="titleMoth" alt="Moth companion"></div>
+    <p>Guide <b>Neri</b>, the lantern courier, through 8 waves of monsters<br>
+    across 3 glowing regions — and defeat the <b>Gloam Bell</b>,<br>
+    the creature that swallowed the dungeon's light.</p>
+    <div class="tiles">
+      <div class="tile" style="background:#5EAA62">🌸 Bloomroot<br>Warrens</div>
+      <div class="tile" style="background:#D6653E">🔥 Cinderglass<br>Works</div>
+      <div class="tile" style="background:#8A75B7">🌙 Moonmilk<br>Vault</div>
+    </div>
+    <p>Move: WASD / arrows / joystick &nbsp;·&nbsp; Skills: J K L Space<br>
+    Attack is automatic — your job is to move, dodge and time skills.</p>
+    <p>Seed: <input id="seedInput" value="" inputmode="numeric"> <button id="startBtn">▶ START</button></p>
+    <p id="bestScore">Best: 0 pts</p>
+  </div>
+
+  <div id="intermission" class="panel hidden">
+    <h2>🌟 WAVE CLEARED! 🌟</h2>
+    <p id="interTimer">Next wave in 20s — pick an upgrade!</p>
+    <div id="offers"></div>
+    <button id="skipBtn" class="ghost">Skip — save coins</button>
+  </div>
+
+  <div id="pausePanel" class="panel hidden">
+    <h2>⏸ PAUSED</h2>
+    <p>Take a breath. The dungeon waits.</p>
+    <button id="resumeBtn">▶ Resume</button><br>
+    <button id="restartBtn" class="ghost">↻ Restart run</button>
+    <button id="quitBtn" class="ghost">🏠 Title</button>
+  </div>
+
+  <div id="result" class="panel hidden">
+    <h1 id="resultTitle">✨ VICTORY ✨</h1>
+    <p id="resultScore">Score: 0</p>
+    <p id="resultBest"></p>
+    <p id="resultWave"></p>
+    <button id="againBtn">↻ Play again</button>
+    <button id="titleBtn" class="ghost">🏠 Title</button>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
