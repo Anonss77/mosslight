@@ -85,8 +85,8 @@ function whiteOf(canvas) { return tintOf(canvas, '#FFFFFF'); }
 // two visible boots, dark outline on every floor palette.
 const NERI_PAL = {
   K: '#18233A', k: '#293653', H: '#5B344A', h: '#7B4660',
-  S: '#F2B38A', s: '#D8786F', C: '#176B73', c: '#2E9A91',
-  R: '#E34F5F', r: '#B93650', L: '#FFC857', l: '#FFF0A6',
+  S: '#F2B38A', s: '#D8786F', C: '#1B8A90', c: '#3DB5A8',
+  R: '#FF5A68', r: '#B93650', L: '#FFC857', l: '#FFF0A6',
   M: '#A7B8B0', B: '#2E294E', W: '#F8E6C4',
 };
 const NERI_IDLE = [
@@ -193,25 +193,26 @@ const LANTERN = [
 ];
 
 // Precomputed lantern glow: one radial gradient with the spec's three
-// bands (0-20px alpha .15, 20-38px .08, 38-54px .035), drawn 'lighter'.
+// bands, drawn 'lighter'. v3: bigger (144px) and brighter so Neri's
+// lantern reads at a glance, like the hero aura in the references.
 function makeLanternGlow() {
   const c = document.createElement('canvas');
-  c.width = 108; c.height = 108;
+  c.width = 144; c.height = 144;
   const g = c.getContext('2d');
-  const grad = g.createRadialGradient(54, 54, 0, 54, 54, 54);
-  grad.addColorStop(0, 'rgba(255,224,111,0.15)');
-  grad.addColorStop(20 / 54, 'rgba(255,224,111,0.15)');
-  grad.addColorStop(20 / 54, 'rgba(255,205,84,0.08)');
-  grad.addColorStop(38 / 54, 'rgba(255,205,84,0.08)');
-  grad.addColorStop(38 / 54, 'rgba(255,190,62,0.035)');
+  const grad = g.createRadialGradient(72, 72, 0, 72, 72, 72);
+  grad.addColorStop(0, 'rgba(255,224,111,0.22)');
+  grad.addColorStop(26 / 72, 'rgba(255,224,111,0.22)');
+  grad.addColorStop(26 / 72, 'rgba(255,205,84,0.12)');
+  grad.addColorStop(50 / 72, 'rgba(255,205,84,0.12)');
+  grad.addColorStop(50 / 72, 'rgba(255,190,62,0.05)');
   grad.addColorStop(1, 'rgba(255,190,62,0)');
   g.fillStyle = grad;
-  g.fillRect(0, 0, 108, 108);
+  g.fillRect(0, 0, 144, 144);
   return c;
 }
 
 // Moth companion, 8x8 source rendered at 2x. Two wing frames.
-const MOTH_PAL = { b: '#6D5CA8', w: '#B8E1D5', h: '#FFF0A6', K: '#18233A' };
+const MOTH_PAL = { b: '#8A7AC8', w: '#B8E1D5', h: '#FFF0A6', K: '#18233A' };
 const MOTH_A = [
   'wh....hw',
   'wwh..hww',
@@ -236,7 +237,7 @@ const MOTH_B = [
 // ---------------------------------------------------------------- Enemies
 // Puffcap: pink mushroom, three-lobed cap, pale spots, visible eyes.
 // 20x20. Hit flash: whole body white 70 ms. Death: 8 particles.
-const PUFF_PAL = { o: '#482B4A', p: '#E66B9A', h: '#FFB3C7', s: '#E7C8B4', d: '#A85C72', e: '#241D39' };
+const PUFF_PAL = { o: '#482B4A', p: '#FF7FB0', h: '#FFB3C7', s: '#FFE0C8', d: '#A85C72', e: '#241D39' };
 const PUFF = [
   '.......oooooo.......',
   '.....ooppppppoo.....',
@@ -262,7 +263,7 @@ const PUFF = [
 
 // Tinket: brass wind-up beetle, side gear protrusions, cyan eye lens,
 // red wind-up key. 18x22. Hit flash: brass -> #FFF4D0, 60 ms.
-const TINK_PAL = { b: '#B77A3E', h: '#F2C267', d: '#69433E', g: '#E7B35A', l: '#65D5D5', k: '#E05B4F' };
+const TINK_PAL = { b: '#D89A4A', h: '#FFD76A', d: '#69433E', g: '#E7B35A', l: '#65D5D5', k: '#E05B4F' };
 const TINK = [
   '........kk........',
   '.......kkkk.......',
@@ -290,7 +291,7 @@ const TINK = [
 
 // Brambler: leafy stump, three-point leaf crown, pale eyes, thorn tips.
 // 24x24. Hit flash: bark #F6D3A6, leaves white, 70 ms.
-const BRAM_PAL = { t: '#7C5949', h: '#B17A57', d: '#403443', g: '#5DBB72', l: '#A7E68A', y: '#E3FF9A', w: '#F6F0FF' };
+const BRAM_PAL = { t: '#96684F', h: '#C98A68', d: '#403443', g: '#6FE08A', l: '#C0F5A0', y: '#E3FF9A', w: '#F6F0FF' };
 const BRAM = [
   '..........gg............',
   '.........gggg...........',
@@ -321,7 +322,7 @@ const BRAM = [
 // The Gloam Bell: 48x48 source (24-wide half, mirrored), turquoise glass
 // filling nearly the whole footprint, violet crown, gold rim, dark mouth.
 // Crescent reflection + gold clapper are drawn post-bake.
-const BELL_PAL = { g: '#45C6C4', h: '#B2FFFF', d: '#246C89', m: '#283D72', y: '#FFC857', v: '#A98BEA', o: '#171A43' };
+const BELL_PAL = { g: '#5FE0DC', h: '#B2FFFF', d: '#2E8AB0', m: '#283D72', y: '#FFD76A', v: '#A98BEA', o: '#171A43' };
 const BELL_HALF = [
   '......................vv',
   '.....................vvv',
@@ -374,75 +375,94 @@ const BELL_HALF = [
 ];
 
 // ---------------------------------------------------------------- Loot & props
-const COIN_PAL = { y: '#F5D45A', g: '#C9973F', w: '#FFF3C4' };
+// v3: redrawn 16x16 (chest 20x20) with real item detail — dark edge,
+// bright fill, white shine — so each reads as a game item, not a blob.
+// Coins, hearts and shards drawn in game.js at 28px (was 24), chest 36px.
+const COIN_PAL = { y: '#FFD76A', g: '#B8862E', w: '#FFF8D0' };
 const COIN = [
-  '...gggggg...',
-  '..gyyyyyyg..',
-  '.gyyyyyyyyg.',
-  '.gyywyyyyyg.',
-  'gyyyyyyyyyyg',
-  'gyyyyyyyyyyg',
-  'gyyyyyyyyyyg',
-  'gyyyyyyyyyyg',
-  '.gyyyyyyyyg.',
-  '.gyyyyyyyyg.',
-  '..gyyyyyyg..',
-  '...gggggg...',
+  '.....gggggg.....',
+  '...ggyyyyyygg...',
+  '..gyyyyyyyyyyg..',
+  '.gywwyyyyyyyyyg.',
+  '.gywwyyyyyyyyyg.',
+  'gyyyyyyyyyyyyyyg',
+  'gyyyyyyyyyyyyyyg',
+  'gyyyyyyyyyyyyyyg',
+  'gyyyyyyyyyyyyyyg',
+  'gyyyyyyyyyyyyyyg',
+  'gyyyyyyyyyyyyyyg',
+  '.gyyyyyyyyyyyyg.',
+  '.gyyyyyyyyyyyyg.',
+  '..gyyyyyyyyyyg..',
+  '...ggyyyyyygg...',
+  '.....gggggg.....',
 ];
 
-const HEART_PAL = { r: '#E94F62', w: '#FFB3C0' };
+const HEART_PAL = { r: '#FF5A6E', d: '#A02040', w: '#FFD0DA' };
 const HEART = [
-  '.rrrr..rrrr.',
-  'rwrrrrrrrrrr',
-  'rrrrrrrrrrrr',
-  'rrrrrrrrrrrr',
-  'rrrrrrrrrrrr',
-  '.rrrrrrrrrr.',
-  '..rrrrrrrr..',
-  '...rrrrrr...',
-  '....rrrr....',
-  '.....rr.....',
-  '............',
-  '............',
-];
-
-const SHARD_PAL = { c: '#35C9D0', w: '#D8FBFF' };
-const SHARD = [
-  '.....cc.....',
-  '....cccc....',
-  '...cwcccc...',
-  '..cccccccc..',
-  '..cccccccc..',
-  '..cccccccc..',
-  '..cccccccc..',
-  '...cccccc...',
-  '....cccc....',
-  '.....cc.....',
-  '............',
-  '............',
-];
-
-const CHEST_PAL = { b: '#8A5A33', y: '#FFD76A', d: '#6B4226' };
-const CHEST = [
-  '....bbbbbbbb....',
-  '...bbbbbbbbbb...',
-  '..bbbbbbbbbbbb..',
-  '..byyyyyyyyyyb..',
-  '..byyyyyyyyyyb..',
-  '..byyyyyyyyyyb..',
-  '..bbbbbbbbbbbb..',
-  '..bddddddddddb..',
-  '..bddddddddddb..',
-  '..bddddddddddb..',
-  '..bddddddddddb..',
-  '..bddddddddddb..',
-  '..bbbbbbbbbbbb..',
-  '...bbbbbbbbbb...',
-  '....bbbbbbbb....',
+  '...ddrr..rrdd...',
+  '..drrrrrrrrrrd..',
+  '.dwrrrrrrrrrrrd.',
+  '.dwrrrrrrrrrrrd.',
+  'drrrrrrrrrrrrrrd',
+  'drrrrrrrrrrrrrrd',
+  'drrrrrrrrrrrrrrd',
+  '.drrrrrrrrrrrrd.',
+  '..drrrrrrrrrrd..',
+  '...drrrrrrrrd...',
+  '....drrrrrrd....',
+  '.....drrrrd.....',
+  '......drrd......',
+  '.......dd.......',
+  '................',
   '................',
 ];
 
-const STATUE_PAL = { s: '#9A8FBF', g: '#FFD76A' };
+const SHARD_PAL = { c: '#4ADDE0', b: '#2AA8C8', d: '#1E6E7E', l: '#B2FFFF', w: '#FFFFFF' };
+const SHARD = [
+  '.......dd.......',
+  '......dccd......',
+  '.....dccccd.....',
+  '....dcwccccd....',
+  '...dccclcccd....',
+  '...dcclccccd....',
+  '..dccclcccccd...',
+  '..dccllcccccd...',
+  '..dccclcccccd...',
+  '..dccclcccccd...',
+  '...dccclcccd....',
+  '....dcccccd.....',
+  '.....dcccd......',
+  '......dcd.......',
+  '.......d........',
+  '................',
+];
+
+const CHEST_PAL = { b: '#8A5A33', y: '#FFD76A', d: '#4A2E1A', l: '#FFE9A8' };
+const CHEST = [
+  '.....dddddddddd.....',
+  '...ddbbbbbbbbbbdd...',
+  '..dbbbbbbbbbbbbbbd..',
+  '..dbbyyyyyyyyyybbd..',
+  '..dbbyyyyyyyyyybbd..',
+  '..dbbbbbbyybbbbbbd..',
+  '..dbbbbbbyybbbbbbd..',
+  '..dbbbbbbyybbbbbbd..',
+  '..dddddddddddddddd..',
+  '..dbbbbbbbbbbbbbbd..',
+  '..dbbbbbbbbbbbbbbd..',
+  '..dbbbbbbllbbbbbbd..',
+  '..dbbbbbbllbbbbbbd..',
+  '..dbbbbbbyybbbbbbd..',
+  '..dbbbbbbyybbbbbbd..',
+  '..dbbbbbbyybbbbbbd..',
+  '..dddddddddddddddd..',
+  '...dddddddddddddd...',
+  '.....dddddddddd.....',
+  '....................',
+];
+
+const STATUE_PAL = { s: '#B0A5D8', g: '#FFD76A' };
 const STATUE = [
   '......ssss......',
   '......ssss......',

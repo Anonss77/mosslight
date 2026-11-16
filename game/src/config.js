@@ -14,21 +14,21 @@ export const STEP = 1 / 60;        // fixed timestep (seconds)
 export const AREAS = [
   {
     name: 'Bloomroot Warrens',
-    outline: '#173F35', wall: '#246B50', floor: '#5EAA62', moss: '#9BD96A',
-    water: '#37B7A1', flower: '#FF658A', loot: '#F5D45A', highlight: '#FFF3C4',
-    accent: '#FF658A',
+    outline: '#14382F', wall: '#2E8A66', floor: '#71CC6F', moss: '#B8F078',
+    water: '#45D8C4', flower: '#FF7FA8', loot: '#F5D45A', highlight: '#FFF3C4',
+    accent: '#FF7FA8',
   },
   {
     name: 'Cinderglass Works',
-    outline: '#472C36', wall: '#8A3C3C', floor: '#D6653E', moss: '#F59B42',
-    water: '#35C9D0', flower: '#E94F62', loot: '#FFE073', highlight: '#FFF2D0',
-    accent: '#35C9D0',
+    outline: '#3A2028', wall: '#A84A4A', floor: '#F07F4A', moss: '#FFB35E',
+    water: '#4ADDE0', flower: '#FF6B7A', loot: '#FFE073', highlight: '#FFF2D0',
+    accent: '#4ADDE0',
   },
   {
     name: 'Moonmilk Vault',
-    outline: '#39294F', wall: '#59477B', floor: '#8A75B7', moss: '#B9A9F0',
-    water: '#76DDE0', flower: '#A7E760', loot: '#FFD76A', highlight: '#F6F0FF',
-    accent: '#B9A9F0',
+    outline: '#2E2140', wall: '#6E58A0', floor: '#A58CD0', moss: '#CDBFFF',
+    water: '#8FEAF0', flower: '#C4F07A', loot: '#FFD76A', highlight: '#F6F0FF',
+    accent: '#CDBFFF',
   },
 ];
 

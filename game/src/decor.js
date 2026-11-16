@@ -98,16 +98,20 @@ function moonStarDust(g, x, y) {
   px(g, x + 6, y + 11, 1, 1, '#FFFFFF'); px(g, x + 12, y + 9, 2, 2, '#D9F5FF');
 }
 
-// Plain-floor 1px highlight (kept from v1's speckle spirit).
+// Plain-floor highlight (kept from v1's speckle spirit).
+// v3: two extra speckles at FIXED offsets (no extra RNG calls — the bake
+// stream is untouched), so the floor texture reads at a glance.
 export function plainFloorHighlight(g, x, y, areaIdx, rng) {
   const cols = ['#A7E68A', '#E7B35A', '#C7D8FF'];
   px(g, x + 3 + rng.int(0, 10), y + 3 + rng.int(0, 10), 1, 1, cols[areaIdx]);
+  px(g, x + 11, y + 12, 1, 1, cols[areaIdx]);
+  px(g, x + 12, y + 3, 1, 1, '#FFFFFF');
 }
 
 // ------------------------------------------------------------------ wall kits
 export const WALL_KIT = [
   { // Bloomroot
-    top: '#75D38C', face: '#183D3C', low: '#122C32', side: '#10272E',
+    top: '#8FE8A8', face: '#1F4A44', low: '#122C32', side: '#10272E',
     growth: (g, x, y, rng) => {
       // Root growth: branching shape on 35% of wall sections.
       if (!rng.chance(0.35)) return;
@@ -124,7 +128,7 @@ export const WALL_KIT = [
     corner: (g, x, y) => { px(g, x + 10, y + 10, 6, 6, '#A7E68A'); px(g, x + 12, y + 12, 4, 4, '#6FCB73'); },
   },
   { // Cinderglass
-    top: '#E7B35A', face: '#4A2935', low: '#2A2533', sideW: '#362438', sideS: '#211F2C',
+    top: '#E7B35A', face: '#5C3644', low: '#2A2533', sideW: '#362438', sideS: '#211F2C',
     growth: (g, x, y, rng) => {
       if (!rng.chance(0.22)) return; // cyan glass growths
       const bx = x + rng.int(2, 10), by = y + rng.int(4, 10);
@@ -147,7 +151,7 @@ export const WALL_KIT = [
     },
   },
   { // Moonmilk
-    top: '#E3FF9A', face: '#4F4D96', low: '#393B78', side: '#303566',
+    top: '#E3FF9A', face: '#6058AC', low: '#393B78', side: '#303566',
     growth: (g, x, y, rng) => {
       if (!rng.chance(0.42)) return; // crystal growths
       const bx = x + rng.int(2, 10), by = y + rng.int(4, 10);

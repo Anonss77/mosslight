@@ -149,7 +149,7 @@ export class Game {
     this.visualRng = new Rng((seed ^ 0x51ab3f) >>> 0);
     this.ambient = new Ambient(seed);
     this.ambient.setArea(0);
-    this.vignette = makeVignette(0.10);
+    this.vignette = makeVignette(0.04);
     this.interState = this.initInteractive();
     this.rings = [];
     this.lastSkillPos = null;
@@ -498,7 +498,7 @@ export class Game {
   damageBoss(amount) {
     if (!this.boss || this.boss.dead) return;
     const res = this.boss.hurt(amount);
-    this.dmgNums.add(this.boss.x, this.boss.y - 30, amount, '#FFD76A');
+    this.dmgNums.add(this.boss.x, this.boss.y - 30, amount, '#FFD76A', 26);
     if (res === 'phase2' || res === 'phase3') {
       this.boss.state = 'roar'; this.boss.stateT = BOSS.roarTime;
       this.sfx.bossRoar();
@@ -651,7 +651,7 @@ export class Game {
     if (dealt > 0) {
       this.shake(FEEL.shakeHit[0], FEEL.shakeHit[1]);
       this.sfx.hit();
-      this.dmgNums.add(this.player.x, this.player.y - 22, amount, '#FF6B5E');
+      this.dmgNums.add(this.player.x, this.player.y - 22, amount, '#FF6B5E', 20);
     }
   }
 
@@ -864,7 +864,7 @@ export class Game {
       this.area = newArea;
       this.layer = bakeLayer(this.dungeon, newArea);
       this.ambient.setArea(newArea);
-      this.vignette = makeVignette(newArea === 2 ? 0.06 : 0.10);
+      this.vignette = makeVignette(newArea === 2 ? 0.03 : 0.04);
       this.interState = this.initInteractive();
     }
     this.waveT = WAVE_LEN;
@@ -892,10 +892,12 @@ export class Game {
   }
 
   collectLoot(l) {
-    if (l.type === 'coin') { this.coins += l.value; this.score += SCORE.coin * l.value; this.sfx.coin(); }
-    else if (l.type === 'shard') { this.shards += l.value; this.score += SCORE.shard * l.value; this.sfx.coin(); }
-    else if (l.type === 'heart') { this.player.heal(LOOT.heartHeal); this.sfx.heart(); }
-    else if (l.type === 'bigheart') { this.player.heal(BOSS.lootHeart); this.sfx.heart(); }
+    // v3: a floating pickup number, like the reference images (gold +2,
+    // blue +25, green heal) — visual only, no RNG, no gameplay change.
+    if (l.type === 'coin') { this.coins += l.value; this.score += SCORE.coin * l.value; this.sfx.coin(); this.dmgNums.addText(this.player.x, this.player.y - 26, `+${SCORE.coin * l.value}`, '#FFD76A', 20); }
+    else if (l.type === 'shard') { this.shards += l.value; this.score += SCORE.shard * l.value; this.sfx.coin(); this.dmgNums.addText(this.player.x, this.player.y - 26, `+${SCORE.shard * l.value}`, '#4ADDE0', 20); }
+    else if (l.type === 'heart') { this.player.heal(LOOT.heartHeal); this.sfx.heart(); this.dmgNums.addText(this.player.x, this.player.y - 26, `+${LOOT.heartHeal}`, '#7FE08A', 20); }
+    else if (l.type === 'bigheart') { this.player.heal(BOSS.lootHeart); this.sfx.heart(); this.dmgNums.addText(this.player.x, this.player.y - 26, `+${BOSS.lootHeart}`, '#7FE08A', 24); }
   }
 
   // ---------------------------------------------------------- endings
@@ -1109,7 +1111,7 @@ export class Game {
     // Chests and statues.
     for (const c of this.dungeon.chests) {
       if (c.opened) continue;
-      g.drawImage(this.sprites.chest, X(c.x) - 16, Y(c.y) - 16, 32, 32);
+      g.drawImage(this.sprites.chest, X(c.x) - 18, Y(c.y) - 18, 36, 36);
     }
     for (const s of this.dungeon.statues) {
       g.drawImage(this.sprites.statue, X(s.x) - 16, Y(s.y) - 24, 32, 48);
@@ -1123,16 +1125,24 @@ export class Game {
     // Loot.
     for (const l of this.loot.list) {
       const spr = l.type === 'coin' ? this.sprites.coin : l.type === 'heart' || l.type === 'bigheart' ? this.sprites.heart : this.sprites.shard;
-      const sz = l.type === 'bigheart' ? 36 : 24;
+      const sz = l.type === 'bigheart' ? 40 : 28;
       const blink = l.life < 3 && Math.floor(l.life * 6) % 2 === 0;
       if (!blink) g.drawImage(spr, X(l.x) - sz / 2, Y(l.y) - sz / 2, sz, sz);
     }
-    // Ember patches.
+    // Ember patches. v3: brighter, with flame tongues around the edge
+    // swaying with time (render-only, no timing change).
     for (const p of this.embers.list) {
-      g.fillStyle = 'rgba(255,138,42,0.30)';
+      g.fillStyle = 'rgba(255,138,42,0.45)';
       g.beginPath(); g.arc(X(p.x), Y(p.y), p.radius * SCALE, 0, Math.PI * 2); g.fill();
-      g.fillStyle = 'rgba(255,210,90,0.45)';
+      g.fillStyle = 'rgba(255,210,90,0.6)';
       g.beginPath(); g.arc(X(p.x), Y(p.y), p.radius * SCALE * 0.55, 0, Math.PI * 2); g.fill();
+      g.fillStyle = 'rgba(255,215,106,0.85)';
+      for (let i = 0; i < 5; i++) {
+        const a = i * 1.256 + this.time * 2.2;
+        const fx = X(p.x) + Math.cos(a) * p.radius * SCALE * 0.85;
+        const fy = Y(p.y) + Math.sin(a) * p.radius * SCALE * 0.85;
+        g.beginPath(); g.moveTo(fx - 5, fy + 4); g.lineTo(fx, fy - 8); g.lineTo(fx + 5, fy + 4); g.closePath(); g.fill();
+      }
     }
     // Interactive prop bases (reactions drawn after Neri).
     this.renderInteractiveBases(g, X, Y);
@@ -1155,12 +1165,18 @@ export class Game {
       g.lineWidth = 4;
       g.beginPath(); g.arc(X(r.x), Y(r.y), (20 + (r.maxR - 20) * frac) * SCALE, 0, Math.PI * 2); g.stroke();
     }
-    // Slash arc.
+    // Slash arc. v3: a big white crescent slash facing the attack, with
+    // an orange glow underneath — like the reference slash effect.
     if (this.slashT > 0) {
       const p = this.player;
-      g.strokeStyle = 'rgba(255,255,255,0.9)';
-      g.lineWidth = 6;
-      g.beginPath(); g.arc(X(p.x), Y(p.y), 56 * SCALE * (1.2 - this.slashT), 0, Math.PI * 2); g.stroke();
+      const ang = Math.atan2(p.facing.y, p.facing.x);
+      const r = 56 * SCALE * (1.2 - this.slashT);
+      g.strokeStyle = 'rgba(255,138,42,0.55)';
+      g.lineWidth = 16;
+      g.beginPath(); g.arc(X(p.x), Y(p.y), r, ang - 1.1, ang + 1.1); g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.95)';
+      g.lineWidth = 10;
+      g.beginPath(); g.arc(X(p.x), Y(p.y), r, ang - 1.1, ang + 1.1); g.stroke();
     }
     // Starfall wind-up ring.
     if (this.starfallFx) {
@@ -1169,10 +1185,31 @@ export class Game {
       g.strokeStyle = `rgba(255,215,106,${0.4 + 0.6 * t})`;
       g.lineWidth = 5;
       g.beginPath(); g.arc(X(p.x), Y(p.y), 135 * SCALE * t, 0, Math.PI * 2); g.stroke();
+      // v3: falling star streaks converge on the ring (render-only).
+      g.strokeStyle = 'rgba(255,215,106,0.9)';
+      g.lineWidth = 4;
+      for (let i = 0; i < 5; i++) {
+        const a = i * 1.256 + this.time * 1.5;
+        const r1 = 135 * SCALE * (0.4 + 0.6 * t);
+        const r2 = r1 - 26;
+        g.beginPath();
+        g.moveTo(X(p.x) + Math.cos(a) * r1, Y(p.y) + Math.sin(a) * r1);
+        g.lineTo(X(p.x) + Math.cos(a) * r2, Y(p.y) + Math.sin(a) * r2);
+        g.stroke();
+      }
     }
-    // Projectiles.
+    // Projectiles. v3: glow + short trail so bolts read as bright shots.
     for (const pr of this.projectiles.list) {
-      g.fillStyle = pr.from === 'player' ? '#FFE9A8' : pr.from === 'enemy' ? '#35C9D0' : '#76DDE0';
+      const col = pr.from === 'player' ? '#FFE9A8' : pr.from === 'enemy' ? '#35C9D0' : '#76DDE0';
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = 0.35;
+      g.fillStyle = col;
+      g.beginPath(); g.arc(X(pr.x), Y(pr.y), pr.radius * SCALE * 2.2, 0, Math.PI * 2); g.fill();
+      g.restore();
+      g.strokeStyle = col; g.lineWidth = pr.radius * SCALE;
+      g.beginPath(); g.moveTo(X(pr.x - pr.vx * 0.045), Y(pr.y - pr.vy * 0.045)); g.lineTo(X(pr.x), Y(pr.y)); g.stroke();
+      g.fillStyle = col;
       g.beginPath(); g.arc(X(pr.x), Y(pr.y), pr.radius * SCALE, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#FFFFFF';
       g.beginPath(); g.arc(X(pr.x), Y(pr.y), pr.radius * SCALE * 0.4, 0, Math.PI * 2); g.fill();
@@ -1184,13 +1221,17 @@ export class Game {
       g.fillRect(X(pt.x) - pt.size, Y(pt.y) - pt.size, pt.size * 2, pt.size * 2);
     }
     g.globalAlpha = 1;
-    // Damage numbers.
+    // Damage numbers. v3: bigger and bolder, like the reference images —
+    // thick dark outline on all 4 sides, per-item size (boss hits bigger).
     g.textAlign = 'center';
-    g.font = 'bold 16px monospace';
     for (const d of this.dmgNums.list) {
       g.globalAlpha = Math.max(0, d.life / FEEL.dmgNumLife);
-      g.fillStyle = '#1A1A1A';
-      g.fillText(String(d.value), X(d.x) + 1, Y(d.y) + 1);
+      g.font = `bold ${d.size || 22}px monospace`;
+      g.fillStyle = '#141414';
+      g.fillText(String(d.value), X(d.x) + 2, Y(d.y));
+      g.fillText(String(d.value), X(d.x) - 2, Y(d.y));
+      g.fillText(String(d.value), X(d.x), Y(d.y) + 2);
+      g.fillText(String(d.value), X(d.x), Y(d.y) - 2);
       g.fillStyle = d.color;
       g.fillText(String(d.value), X(d.x), Y(d.y));
     }
@@ -1284,19 +1325,28 @@ export class Game {
       g.fillRect(sx + w * 0.17, sy + h * 0.33, 4, 4);
       g.fillRect(sx + w * 0.54, sy + h * 0.33, 4, 4);
     }
-    // Small HP bar when hurt.
+    // Small HP bar when hurt. v3: wider, taller, white border — readable.
     if (e.hp < e.maxHp) {
-      const bw = 28, bx = X(e.x) - bw / 2, by = Y(e.y) - e.radius * SCALE - 10;
-      g.fillStyle = '#1A1A1A'; g.fillRect(bx - 1, by - 1, bw + 2, 6);
-      g.fillStyle = '#E94F62'; g.fillRect(bx, by, bw * (e.hp / e.maxHp), 4);
+      const bw = 34, bx = X(e.x) - bw / 2, by = Y(e.y) - e.radius * SCALE - 12;
+      g.fillStyle = '#FFFFFF'; g.fillRect(bx - 1, by - 1, bw + 2, 8);
+      g.fillStyle = '#1A1A1A'; g.fillRect(bx, by, bw, 6);
+      g.fillStyle = '#E94F62'; g.fillRect(bx, by, bw * (e.hp / e.maxHp), 6);
     }
   }
 
   renderBoss(g, X, Y) {
     const b = this.boss;
-    // Ground shadow (54x12 at +24).
+    // v3: cyan glow pool under the bell so the boss reads from across
+    // the room (render-only).
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = 0.18;
+    g.fillStyle = '#45C6C4';
+    g.beginPath(); g.ellipse(X(b.x), Y(b.y), 64 * SCALE, 40 * SCALE, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
+    // Ground shadow (60x14 at +24).
     g.fillStyle = 'rgba(18,20,50,0.42)';
-    g.beginPath(); g.ellipse(X(b.x), Y(b.y) + 24 * SCALE, 27 * SCALE, 6 * SCALE, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(X(b.x), Y(b.y) + 24 * SCALE, 30 * SCALE, 7 * SCALE, 0, 0, Math.PI * 2); g.fill();
     const spr = b.flash > 0 ? this.sprites.bellWhite : this.sprites.bell;
     const bob = Math.sin(this.time * 3) * 3;
     const w = spr.width * SCALE, h = spr.height * SCALE;
@@ -1386,6 +1436,14 @@ export class Game {
     const bob = p.moving ? Math.sin(p.walkPhase * 2) * 1 : 0;
     const w = spr.width * SCALE, h = spr.height * SCALE;
     const px = X(p.x), py = Y(p.y);
+    // v3: soft amber aura ring under Neri so the hero is findable at a
+    // glance, even on a crowded screen (render-only).
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = 0.20;
+    g.fillStyle = '#FFC857';
+    g.beginPath(); g.arc(px, py, 34 * SCALE, 0, Math.PI * 2); g.fill();
+    g.restore();
     // Ground shadow (30x8 at +17).
     g.fillStyle = 'rgba(12,18,32,0.34)';
     g.beginPath(); g.ellipse(px, py + 17 * SCALE, 15 * SCALE, 4 * SCALE, 0, 0, Math.PI * 2); g.fill();
@@ -1417,7 +1475,7 @@ export class Game {
     g.save();
     g.globalCompositeOperation = 'lighter';
     g.globalAlpha = Math.min(1, flick);
-    g.drawImage(this.sprites.lanternGlow, lx - 54, ly - 54, 108, 108);
+    g.drawImage(this.sprites.lanternGlow, lx - 72, ly - 72, 144, 144);
     g.restore();
     g.drawImage(this.sprites.lantern, lx - lw / 2, ly - lh / 2, lw, lh);
     if (crescent) {
@@ -1431,7 +1489,7 @@ export class Game {
     // Glassguard shield ring.
     if (p.shield > 0) {
       g.strokeStyle = 'rgba(127,212,255,0.85)';
-      g.lineWidth = 4;
+      g.lineWidth = 5;
       g.beginPath(); g.arc(px, py, (p.radius + 8) * SCALE, 0, Math.PI * 2); g.stroke();
     }
   }
@@ -1448,12 +1506,18 @@ export class Game {
       g.fillRect(x, y, 26, 18);
     }
     g.fillStyle = pal.flower;
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 24; i++) {
       const x = (i * 211 + 60) % VIEW_W, y = (i * 151 + 40) % VIEW_H;
       g.fillRect(x, y, 10, 10);
     }
-    // Neri standing in the entrance, with moth.
+    // Neri standing in the entrance, with moth — v3: warm glow behind her.
     const nx = VIEW_W / 2 - 120, ny = 430;
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.globalAlpha = 0.25;
+    g.fillStyle = '#FFC857';
+    g.beginPath(); g.arc(nx + 48, ny + 48, 90, 0, Math.PI * 2); g.fill();
+    g.restore();
     g.drawImage(this.sprites.neri[0], nx, ny, 96, 96);
     g.drawImage(this.sprites.lantern, nx + 66, ny + 40, 20, 28);
     g.drawImage(this.sprites.moth[0], nx - 60, ny - 20, 48, 48);
@@ -1465,9 +1529,10 @@ export class Game {
     const p = this.player;
     if (!p) return;
     $('hpFill').style.width = `${(p.hp / p.maxHp) * 100}%`;
-    $('hpText').textContent = `${Math.ceil(p.hp)} / ${p.maxHp}`;
+    $('hpText').textContent = `HP ${Math.ceil(p.hp)} / ${p.maxHp}`;
     $('hpBar').classList.toggle('low', p.hp <= FEEL.lowHp);
     $('energyFill').style.width = `${(p.energy / HERO.maxEnergy) * 100}%`;
+    $('energyText').textContent = `${Math.floor(p.energy)} / ${HERO.maxEnergy}`;
     $('waveText').textContent = `WAVE ${this.wave} / 8`;
     const t = Math.max(0, this.waveT);
     $('timerText').textContent = this.state === 'intermission' ? '—' : `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -1500,23 +1565,32 @@ export class Game {
     const g = c.getContext('2d');
     const sx = c.width / WORLD_W, sy = c.height / WORLD_H;
     g.clearRect(0, 0, c.width, c.height);
-    g.fillStyle = 'rgba(0,0,0,0.35)';
+    // v3: ROUND minimap like the reference images — terrain colours per
+    // area inside a clipped circle, bright dots, white-gold border.
+    g.save();
+    g.beginPath(); g.arc(c.width / 2, c.height / 2, c.width / 2 - 2, 0, Math.PI * 2); g.clip();
+    g.fillStyle = '#1A2438';
     g.fillRect(0, 0, c.width, c.height);
     for (const r of this.dungeon.rooms) {
       g.fillStyle = AREAS[r.area].floor;
-      g.globalAlpha = 0.55;
+      g.globalAlpha = 0.85;
       g.fillRect(r.x * TILE * sx, r.y * TILE * sy, r.w * TILE * sx, r.h * TILE * sy);
     }
     g.globalAlpha = 1;
     for (const e of this.enemies) {
-      g.fillStyle = '#FF5050';
-      g.fillRect(e.x * sx - 1, e.y * sy - 1, 3, 3);
+      g.fillStyle = '#FF4040';
+      g.beginPath(); g.arc(e.x * sx, e.y * sy, 2.5, 0, Math.PI * 2); g.fill();
     }
     if (this.boss && !this.boss.dead) {
       g.fillStyle = '#FFD76A';
-      g.fillRect(this.boss.x * sx - 2, this.boss.y * sy - 2, 5, 5);
+      g.beginPath(); g.arc(this.boss.x * sx, this.boss.y * sy, 4.5, 0, Math.PI * 2); g.fill();
     }
     g.fillStyle = '#FFFFFF';
-    g.fillRect(this.player.x * sx - 2, this.player.y * sy - 2, 4, 4);
+    g.strokeStyle = '#FFD76A'; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(this.player.x * sx, this.player.y * sy, 3.5, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.restore();
+    g.strokeStyle = 'rgba(255,255,255,0.9)';
+    g.lineWidth = 3;
+    g.beginPath(); g.arc(c.width / 2, c.height / 2, c.width / 2 - 2, 0, Math.PI * 2); g.stroke();
   }
 }

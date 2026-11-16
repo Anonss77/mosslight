@@ -253,8 +253,17 @@ export class Particles {
 // ---------------------------------------------------------------- damage numbers
 export class DamageNumbers {
   constructor() { this.list = []; }
-  add(x, y, value, color = '#FFFFFF') {
-    this.list.push({ x, y, value: Math.round(value), color, life: FEEL.dmgNumLife });
+  add(x, y, value, color = '#FFFFFF', size = 22) {
+    // v3: stagger simultaneous numbers horizontally (-9/0/+9px, cycling
+    // with the live count) so two hits on adjacent enemies don't merge
+    // into one unreadable number. Visual only — no RNG, no gameplay.
+    const stagger = (this.list.length % 3 - 1) * 9;
+    this.list.push({ x: x + stagger, y, value: Math.round(value), color, size, life: FEEL.dmgNumLife });
+  }
+  // Raw text (e.g. '+2' gold, '+25' shard) — no rounding, keeps the sign.
+  addText(x, y, text, color = '#FFFFFF', size = 20) {
+    const stagger = (this.list.length % 3 - 1) * 9;
+    this.list.push({ x: x + stagger, y, value: String(text), color, size, life: FEEL.dmgNumLife });
   }
   update(dt) {
     for (let i = this.list.length - 1; i >= 0; i--) {
