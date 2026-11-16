@@ -12,10 +12,11 @@
 
   body { display: flex; align-items: center; justify-content: center;
     background: radial-gradient(ellipse at 50% 42%, #8fd97a 0%, #4a9a5e 45%, #2f7d5c 100%); }
-  #rotateHint { display: none; position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 5;
-    background: rgba(16,32,22,0.92); color: #FFD76A; border: 2px solid #FFD76A; border-radius: 999px;
-    font: bold 14px/1.4 monospace; padding: 10px 18px; text-align: center; white-space: nowrap; }
-  @media (orientation: portrait) { #rotateHint { display: block; } }
+  #rotateOverlay{display:none;position:fixed;inset:0;z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:linear-gradient(#7EC8F2,#6FBF7A 70%);color:#fff;text-align:center;text-shadow:2px 2px 0 #0006}
+  #rotateOverlay .rotPhone{font-size:64px;animation:rot 1.6s ease-in-out infinite}
+  @keyframes rot{50%{transform:rotate(90deg)}}
+  #rotateOverlay b{font-size:24px}
+  @media (pointer:coarse) and (orientation:portrait){#rotateOverlay{display:flex}}
   #stage { position: relative; width: 100vw; height: 100vh; flex: none; overflow: hidden; }
   #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   .hidden { display: none !important; }
@@ -96,67 +97,85 @@
   #bagPanel { width: min(620px, 94vw); }
   .bag-item.empty { opacity: 0.45; }
 
-  .panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; max-width: 94vw; max-height: 92vh; overflow-y: auto;
-    background: linear-gradient(165deg, rgba(30,62,44,0.97), rgba(10,22,16,0.97)) padding-box, linear-gradient(135deg, #FFE9A8, #FF8A2A 40%, #37A176 78%, #FFE9A8) border-box;
-    border: 3px solid transparent; border-radius: 24px; padding: 30px 38px;
-    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; color: #FFF3C4;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,233,168,0.22), inset 0 1px 0 rgba(255,255,255,0.22); }
-  .panel::before { content: ''; position: absolute; inset: 0; border-radius: 21px; pointer-events: none;
-    background: radial-gradient(ellipse 85% 32% at 50% 0%, rgba(255,233,168,0.20), transparent 70%); }
-  .panel h1 { margin: 0 0 6px; font-size: clamp(36px, 7vw, 58px); letter-spacing: 8px;
-    background: linear-gradient(#FFF3C4, #FFB347 55%, #FF8A2A); -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(3px 3px 0 rgba(0,0,0,0.55)); }
-  .panel h2 { margin: 0 0 14px; font-size: clamp(24px, 4vw, 32px); letter-spacing: 3px; color: #FFD76A; text-shadow: 2px 2px 0 rgba(0,0,0,0.5); }
-  .panel p { font-size: 16px; line-height: 1.55; margin: 8px 0; }
-  .panel button { font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; font-size: 19px; font-weight: bold; padding: 13px 30px; margin: 8px 6px 0;
-    background: linear-gradient(#FFE9A8, #F5C93A); color: #173F35; border: 3px solid #FFF3C4; border-radius: 12px; cursor: pointer; box-shadow: 0 5px 0 #A8842A, 0 8px 16px rgba(0,0,0,0.45); }
-  .panel button:hover { background: linear-gradient(#FFF3C4, #FFE9A8); }
-  .panel button:active { transform: translateY(3px); box-shadow: 0 2px 0 #A8842A, 0 4px 8px rgba(0,0,0,0.45); }
-  .panel button.ghost { background: transparent; color: #FFF3C4; border-color: #9BD96A; box-shadow: none; }
-  .secHdr { font-size: 13px !important; letter-spacing: 4px; color: #FFD76A !important; text-transform: uppercase; margin: 10px 0 0 !important; opacity: 0.95; }
-  #seedInput { font-family: monospace; font-size: 17px; padding: 10px 12px; width: 170px; text-align: center;
-    background: #173F35; color: #FFF3C4; border: 2px solid #9BD96A; border-radius: 8px; }
-  .tiles { display: flex; gap: 10px; justify-content: center; margin: 14px 0 4px; flex-wrap: wrap; }
-  .tile { width: 120px; padding: 12px 6px 10px; border-radius: 14px; font-size: 13px; font-weight: bold; color: #fff; text-shadow: 1px 1px 0 #000;
-    border: 2px solid rgba(255,255,255,0.4); box-shadow: 0 8px 18px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.35); }
-  .tile .ic { display: block; font-size: 30px; line-height: 1.2; text-shadow: none; }
-  #seedHint { font-size: 12px; opacity: 0.85; margin: 4px 0 0; }
-  #interPanel { width: min(680px, 94vw); }
-  #offerRow, #shopRow { display: flex; gap: 12px; justify-content: center; margin: 14px 0; flex-wrap: wrap; }
-  #shopRow { margin-top: 6px; }
-  .offer.shop { width: 140px; padding: 12px 8px; }
-  .offer.shop b { font-size: 15px; }
-  .offer.off { opacity: 0.45; }
-  .offer { display: block; width: 180px; padding: 14px 10px 12px; background: linear-gradient(170deg, #2E8563, #123524); border: 2px solid rgba(155,217,106,0.75);
-    border-radius: 16px; color: #FFF3C4; font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; cursor: pointer; text-align: center;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.22); }
-  .offer:hover { background: linear-gradient(170deg, #37A176, #1B4A35); transform: translateY(-3px); border-color: #FFD76A; box-shadow: 0 12px 24px rgba(0,0,0,0.5), 0 0 14px rgba(255,215,106,0.35); }
-  .offer .ic { display: block; font-size: 30px; line-height: 1.2; margin-bottom: 2px; }
-  .offer b { display: block; font-size: 17px; color: #FFD76A; margin-bottom: 4px; text-shadow: 1px 1px 0 rgba(0,0,0,0.5); }
-  .panel .offer { background: linear-gradient(170deg, #2E8563, #123524); color: #FFF3C4; padding: 14px 10px 12px; }
-  .offer span { display: block; font-size: 12px; line-height: 1.4; min-height: 34px; }
-  .offer em { display: inline-block; font-style: normal; font-size: 14px; font-weight: bold; margin-top: 8px;
-    background: rgba(0,0,0,0.38); border: 1px solid rgba(255,215,106,0.65); border-radius: 999px; padding: 3px 12px; }
-  .offer.skip { background: rgba(0,0,0,0.25); border-color: rgba(255,255,255,0.35); }
-  .stats { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 16px 0 8px; }
-  .stats div { background: rgba(0,0,0,0.38); border: 1px solid rgba(255,215,106,0.45); border-radius: 12px; padding: 10px 14px; min-width: 84px; }
-  .stats span { display: block; font-size: 11px; letter-spacing: 2px; color: #9BD96A; text-transform: uppercase; margin-bottom: 2px; }
-  .stats b { font-size: 22px; color: #FFE9A8; }
-  #resultBody { font-size: 17px; line-height: 1.6; }
+  .panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:94vw;max-height:92vh;overflow-y:auto;scrollbar-width:none;padding:4px 10px 14px;font-family:'Trebuchet MS','Segoe UI',sans-serif;color:#fff;text-shadow:2px 2px 0 #0008,-1px -1px 0 #0006}
+  #stage:has(.panel:not(.hidden)) :is(#waveText,#timerText,#areaText,#nextText){display:none}
+  #interPanel{width:760px}
+  .panel h1{margin:0 0 2px;font-size:clamp(34px,8vmin,76px);font-weight:900;letter-spacing:5px;transform:rotate(-2deg);background:linear-gradient(#EAF7C8,#A8D97A 42%,#6FA844 70%,#4A7A2E);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 0 #2E4A1E) drop-shadow(0 0 26px #FD6A8C)}
+  .panel h1::before{content:'🏮';display:block;font-size:30px}
+  .panel .tagline{font-size:clamp(15px,3vmin,24px);font-weight:900;letter-spacing:2px;color:#FFE9A8;margin:0 0 8px}
+  .panel p{font-size:16px;line-height:1.5;margin:8px 0}
+  .panel p b{color:#FFE9A8}
+  .plank,.panel button,.tile,.offer,.board{display:inline-block;font-family:'Trebuchet MS','Segoe UI',sans-serif;font-weight:900;color:#3A2410;background-color:#E3B96A;background-image:repeating-linear-gradient(93deg,#5A320A26 0 2px,transparent 2px 9px);border:3px solid #6B4423;border-bottom:6px solid #4A2E12;border-radius:10px;box-shadow:0 6px 0 #0004,0 0 18px #FD6A40,inset 0 2px 0 #FFF5;cursor:pointer;text-shadow:0 1px 0 #FFF6}
+  .panel button{font-size:19px;padding:13px 30px;margin:8px 6px 0}
+  .panel button:hover,.offer:hover,.tile:hover{filter:brightness(1.12)}
+  .panel button:active{transform:translateY(3px);border-bottom-width:3px}
+  .panel button.ghost{background-color:#9A9A9A}
+  .sign{font-size:clamp(20px,4vmin,30px);padding:10px 26px;margin:4px auto 8px}
+  #startBtn{font-size:clamp(20px,4vmin,26px);padding:12px 44px;margin:6px 0 2px;letter-spacing:3px}
+  .menu{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;margin:6px 0}
+  .menu::before{content:'';position:absolute;left:50%;top:-12px;bottom:-12px;width:18px;transform:translateX(-50%);background:#5A3A1A;border-radius:8px;box-shadow:2px 3px 0 #0004;z-index:0}
+  .menu>*{position:relative;z-index:1}
+  .tiles{display:flex;flex-direction:column;gap:8px;align-items:center}
+  .tile{display:flex;align-items:center;gap:10px;width:270px;padding:8px 14px;font-size:14px;text-align:left}
+  .tile .ic{font-size:24px}
+  .tile:nth-child(1){background-color:#8FE07A}
+  .tile:nth-child(2){background-color:#FF9A5E}
+  .tile:nth-child(3){background-color:#C3A8EE}
+  #seedInput{font-family:monospace;font-size:16px;padding:9px 10px;width:150px;text-align:center;background:linear-gradient(#C9C9C9,#8F8F8F);color:#222;border:3px solid #5A5A5A;border-bottom:6px solid #3A3A3A;border-radius:10px;box-shadow:inset 0 3px 6px #0006,0 4px 0 #0004}
+  #seedHint{font-size:12px;opacity:.9;margin:4px 0 0}
+  .panel .board{display:block;margin:10px auto 0;padding:9px 14px;font-size:13px;font-weight:400;max-width:520px}
+  #offerRow,#shopRow{display:flex;gap:12px;justify-content:center;margin:8px 0;flex-wrap:wrap}
+  .offer{display:block;width:150px;padding:10px 8px;background-color:#7FB069}
+  .offer .ic{display:block;font-size:30px;line-height:1.2;margin-bottom:2px}
+  .offer b{display:block;font-size:17px;margin-bottom:4px}
+  .offer span{display:block;font-size:12px;font-weight:400;line-height:1.4;min-height:30px}
+  .offer em{display:inline-block;font-style:normal;font-size:14px;margin-top:8px;background:#3A2410D9;color:#FFE9A8;border:1px solid #FFE9A899;border-radius:999px;padding:3px 12px;text-shadow:none}
+  #offerRow .offer:nth-child(2){background-color:#E07A3F}
+  #offerRow .offer:nth-child(3){background-color:#9B7ED9}
+  .offer.skip{background-color:#8A5A2E;width:140px}
+  .offer.shop{width:140px;padding:12px 8px}
+  #shopRow .offer:nth-child(1){background-color:#B85C38}
+  #shopRow .offer:nth-child(2){background-color:#E8C33C}
+  #shopRow .offer:nth-child(3){background-color:#9A9A9A}
+  #shopRow .offer:nth-child(4){background-color:#6FA844}
+  .offer.off{opacity:.45;filter:grayscale(.6)}
+  .offer.bag-item{width:150px;min-height:130px}
+  #bag-heart{background-color:#C05A3A}
+  #bag-bomb{background-color:#9A9A9A}
+  #bag-magnet{background-color:#D9B83C}
+  .bag-item.empty{opacity:.45}
+  .stats{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0 8px}
+  .stats .plank{padding:10px 14px;min-width:84px}
+  .stats span{display:block;font-size:11px;color:#6B4423;text-transform:uppercase;margin-bottom:2px}
+  .panel .stats b{font-size:22px;color:#3A2410}
+  #resultBody{font-size:17px;line-height:1.6}
 
-  @media (max-width: 700px) {
-    .panel { padding: 20px 16px; border-radius: 18px; }
-    .panel h1 { letter-spacing: 4px; }
-    .panel p { font-size: 14px; }
-    .offer { width: 140px; padding: 12px 8px; }
-    .offer.shop { width: 120px; }
-    #joystick { left: 24px; bottom: 32px; width: 96px; height: 96px; }
-    #joyThumb { left: 28px; top: 28px; width: 40px; height: 40px; }
-    .skill { width: 48px !important; height: 48px !important; }
-    .skill svg { inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); }
-    #buildText { display: none; }
-    #hpBar, #hpText { width: 200px; }
-    #energyBar, #energyText { width: 160px; }
+  @media (max-width:700px){
+    .panel{padding:2px 6px 10px}
+    .panel h1{letter-spacing:3px}
+    .panel p{font-size:14px}
+    .offer{width:140px;padding:10px 8px}
+    .offer.shop{width:120px}
+    #joystick{left:24px;bottom:32px;width:96px;height:96px}
+    #joyThumb{left:28px;top:28px;width:40px;height:40px}
+    .skill{width:48px!important;height:48px!important}
+    .skill svg{inset:8px;width:calc(100% - 16px);height:calc(100% - 16px)}
+    #buildText{display:none}
+    #hpBar,#hpText{width:200px}
+    #energyBar,#energyText{width:160px}
+  }
+  @media (pointer:coarse) and (max-height:500px){
+    .panel{max-width:70vw;max-height:88vh}
+    .intro,#seedHint{display:none}
+    .menu::before{display:none}
+    .tiles{flex-direction:row}
+    .tile{display:block;width:108px;padding:6px 4px;font-size:11px;text-align:center}
+    .tile .ic{display:block;font-size:20px}
+    #startBtn{padding:9px 28px}
+    #seedInput{padding:6px 8px;font-size:13px}
+    .panel .board{font-size:11px;padding:6px 10px}
+    .offer{width:122px;padding:8px 6px}
+    .offer.shop{width:106px}
   }
 </style>
 </head>
@@ -214,35 +233,36 @@
     <button id="camBtn" title="Reset camera">🧭</button>
     <button id="bagBtn" title="Backpack (B)">🎒</button>
   </div>
-  <div id="rotateHint">🔄 Rotate your phone to landscape for fullscreen</div>
 
   <div id="titlePanel" class="panel">
     <h1>MOSSLIGHT</h1>
-    <h2>A bright open-world survival</h2>
-    <p>Help <b>Neri</b> survive 8 waves and defeat the <b>Gloam Bell</b>.<br>
-    Attacks are automatic — tap <b>ATTACK</b> for extra bolts, time your skills.</p>
-    <div class="tiles">
-      <div class="tile" style="background:linear-gradient(160deg,#8FE07A,#3E8A52)"><span class="ic">🌸</span>Bloomroot<br>Warrens</div>
-      <div class="tile" style="background:linear-gradient(160deg,#FF9A5E,#C85A28)"><span class="ic">🔥</span>Cinderglass<br>Works</div>
-      <div class="tile" style="background:linear-gradient(160deg,#C3A8EE,#7A5FC0)"><span class="ic">🌙</span>Moonmilk<br>Vault</div>
+    <p class="tagline">A bright open-world survival</p>
+    <p class="intro">Help <b>Neri</b> survive 8 waves and defeat the <b>Gloam Bell</b>.<br>Attacks are automatic — tap <b>ATTACK</b> for extra bolts, time your skills.</p>
+    <div class="menu">
+      <button id="startBtn" class="plank">▶ START</button>
+      <div class="tiles">
+        <div class="tile"><span class="ic">🌸</span><span>Bloomroot Warrens</span></div>
+        <div class="tile"><span class="ic">🔥</span><span>Cinderglass Works</span></div>
+        <div class="tile"><span class="ic">🌙</span><span>Moonmilk Vault</span></div>
+      </div>
     </div>
-    <p>Move: WASD / arrows / joystick &nbsp;·&nbsp; Attack: J / Space &nbsp;·&nbsp; Skills: Q E R F C &nbsp;·&nbsp; Bag: B<br>Drag empty area: rotate camera &nbsp;·&nbsp; 🧭: reset camera</p>
-    <p>Seed: <input id="seedInput" value="" inputmode="numeric" placeholder="random"> <button id="startBtn">▶ START</button></p>
+    <p class="seedrow">Seed: <input id="seedInput" value="" inputmode="numeric" placeholder="random"></p>
     <p id="seedHint">Seed = world code. Same number = same world. Empty = random.</p>
+    <p class="board">Move: WASD / arrows / joystick &nbsp;·&nbsp; Attack: J / Space &nbsp;·&nbsp; Skills: Q E R F C &nbsp;·&nbsp; Bag: B<br>Drag empty area: rotate camera &nbsp;·&nbsp; 🧭: reset camera</p>
     <p id="bestScore">Best: 0 pts</p>
   </div>
 
   <div id="interPanel" class="panel hidden">
-    <h2>🌟 WAVE CLEARED! 🌟</h2>
+    <h2 class="plank sign">🌟 WAVE CLEARED! 🌟</h2>
     <p>Next wave in 20s — pick an upgrade!</p>
     <div id="offerRow"></div>
     <p id="shopCoins">🪙 0 coins — shop at wave break!</p>
-    <p class="secHdr">🛒 SHOP</p>
+    <p class="plank sign">🛒 SHOP</p>
     <div id="shopRow"></div>
   </div>
 
   <div id="pausePanel" class="panel hidden">
-    <h2>⏸ PAUSED</h2>
+    <h2 class="plank sign">⏸ PAUSED</h2>
     <p>Take a breath. The wilds wait.</p>
     <button id="resumeBtn">▶ Resume</button><br>
     <button id="restartBtn" class="ghost">↻ Restart run</button>
@@ -250,7 +270,7 @@
   </div>
 
   <div id="bagPanel" class="panel hidden">
-    <h2>🎒 BACKPACK</h2>
+    <h2 class="plank sign">🎒 BACKPACK</h2>
     <p id="bagCoins">🪙 0 &nbsp; 💎 0</p>
     <div id="offerRow">
       <button class="offer bag-item" id="bag-heart"><b>❤️ Heart</b><span>Medicine: heal +30 HP</span><em id="bagHeartN">x0</em></button>
@@ -269,5 +289,6 @@
   </div>
 </div>
 <script type="module" src="./src/main.js"></script>
+<div id="rotateOverlay"><div class="rotPhone">📱</div><b>Rotate your device to play</b><span>Landscape only</span></div>
 </body>
 </html>

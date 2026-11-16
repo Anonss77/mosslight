@@ -59,6 +59,7 @@ $('startBtn').addEventListener('click', () => {
   const typed = parseInt(($('seedInput').value || '').trim(), 10);
   startRunWithSeed(Number.isFinite(typed) ? typed : game.seed);
   audio.unlock();
+  if(matchMedia('(pointer:coarse)').matches){try{document.documentElement.requestFullscreen().catch(()=>{}),screen.orientation.lock('landscape').catch(()=>{})}catch(e){}}
 });
 $('againBtn').addEventListener('click', () => startRunWithSeed(game.seed + 1));
 $('titleBtn').addEventListener('click', () => {

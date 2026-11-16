@@ -1550,11 +1550,11 @@ export class Game {
     const body = document.getElementById('resultBody');
     if (title) title.textContent = this.done.result === 'victory' ? 'VICTORY' : 'DEFEAT';
     if (body) {
-      body.innerHTML = `<div class="stats"><div><span>Score</span><b>${this.done.score}</b></div>` +
-        `<div><span>Best</span><b>${this.done.best}</b></div>` +
-        `<div><span>Wave</span><b>${this.done.wave} / ${WAVE_COUNT}</b></div>` +
-        `<div><span>Kills</span><b>${this.done.kills}</b></div>` +
-        `<div><span>Time</span><b>${this.done.time}s</b></div></div>` +
+      body.innerHTML = `<div class="stats"><div class="plank"><span>Score</span><b>${this.done.score}</b></div>` +
+        `<div class="plank"><span>Best</span><b>${this.done.best}</b></div>` +
+        `<div class="plank"><span>Wave</span><b>${this.done.wave} / ${WAVE_COUNT}</b></div>` +
+        `<div class="plank"><span>Kills</span><b>${this.done.kills}</b></div>` +
+        `<div class="plank"><span>Time</span><b>${this.done.time}s</b></div></div>` +
         (this.done.result === 'victory'
           ? 'You defeated the Gloam Bell and relit the wilds!'
           : 'The wilds keep their light… for now.');
