@@ -1,8 +1,4 @@
 
-
-
-
-
 import {
   FIELD_W, FIELD_H,
   WAVE_TIME, INTERMISSION_TIME, WAVE_COUNT, WAVES, AREA_NAMES, AREAS,
@@ -81,7 +77,6 @@ export class Game {
     this.buildRun();
   }
 
-
   buildRun() {
     freshIds();
     resetStagger();
@@ -89,7 +84,6 @@ export class Game {
     this.vrng = makeRng((this.seed ^ 0x51ab3f) >>> 0);
     this.field = generateField(this.seed);
     this.world.setField(this.field);
-
 
     this.player = createPlayer(FIELD_W / 2, FIELD_H / 2);
     this.area = 0;
@@ -113,7 +107,6 @@ export class Game {
     for (const c of this.field.chests) {
       this.chestCoins.set(c, this.rng.int(LOOT.chestCoinsMin, LOOT.chestCoinsMax));
     }
-
 
     this.updateHUD();
   }
@@ -142,6 +135,7 @@ export class Game {
   startIntermission() {
     this.state = 'intermission';
     this.interT = INTERMISSION_TIME;
+    this.audio.play('ring');
     this.coinLog.push(this.coins);
     this.rollOffers();
     this.updateHUD();
@@ -176,7 +170,7 @@ export class Game {
     if (u.id === 'cape') { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); }
     if (u.id === 'charm') { p.charmCrescent = (p.charmCrescent || 0) + 10; p.charmEmber = (p.charmEmber || 0) + 3; p.charmStar = (p.charmStar || 0) + 15; }
     this.offers = this.offers.filter((o) => o.id !== id);
-    this.audio.play('skill');
+    this.audio.play('buy');
     this.updateHUD();
     return true;
   }
@@ -201,7 +195,6 @@ export class Game {
     this.seenToast[kind] = true;
     this.toast = { msg, until: this.time + 2.5 };
   }
-
 
   spawnGroup() {
     const def = WAVES[this.wave - 1];
@@ -238,7 +231,6 @@ export class Game {
     this.boss = createBoss(m.x, m.y);
     this.audio.play('roar');
   }
-
 
   step(dt) {
     if (this.bagOpen) return;
@@ -340,7 +332,6 @@ export class Game {
       }
     } else if (this.waveT <= 0 && !this.boss) {
 
-
       this.endRun('victory');
     } else if (this.waveT <= 0 && this.boss) {
       this.endRun('defeat');
@@ -380,7 +371,6 @@ export class Game {
       else this.castSkill(id);
     }
   }
-
 
   nearestTarget(maxRange, preferBoss = true) {
     const p = this.player;
@@ -448,7 +438,7 @@ export class Game {
     const s = SKILLS[id];
     if (!s) return false;
     if (p.cooldowns[id] > 0) { this.deny = { id, msg: 'Masih cooldown!', until: this.time + 1 }; this.updateHUD(); return false; }
-    if (p.energy < s.cost) { this.deny = { id, msg: `Butuh ${s.cost} energi!`, until: this.time + 1 }; this.updateHUD(); return false; }
+    if (p.energy < s.cost) { this.deny = { id, msg: `Need ${s.cost} energy!`, until: this.time + 1 }; this.updateHUD(); return false; }
     p.energy -= s.cost;
     p.cooldowns[id] = s.cd;
     p.castT = 0.16;
@@ -466,7 +456,7 @@ export class Game {
         hits++;
       }
       if (hits > 0) this.hitstop = FEEL.hitstopCrescent;
-      this.audio.play('skill');
+      this.audio.play('slash');
     } else if (id === 'ember') {
       const target = this.nearestTarget(s.range, true);
       let ax, ay;
@@ -479,27 +469,26 @@ export class Game {
         if (dist(ax, ay, e.x, e.y) <= s.patchRadius + e.radius) this.damageEnemy(e, s.damage, 'skill', '#ff8a2a');
       }
       if (this.boss && dist(ax, ay, this.boss.x, this.boss.y) <= s.patchRadius + this.boss.radius) this.damageBoss(s.damage, 'skill');
-      this.audio.play('skill');
+      this.audio.play('ember');
     } else if (id === 'glassguard') {
       p.shield = s.shield;
       p.shieldT = s.shieldTime;
-      this.audio.play('skill');
+      this.audio.play('shield');
     } else if (id === 'starfall') {
       p.starfallWindup = s.windup;
       p.starfallX = p.x; p.starfallY = p.y;
-      this.audio.play('skill');
+      this.audio.play('starfall');
     } else if (id === 'frost') {
       for (const e of [...this.enemies]) {
         if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) { e.frozenT = s.freeze; this.damageEnemy(e, s.damage, 'skill', '#7fd4ff'); }
       }
       burstParticles(this.particles, this.vrng, p.x, p.y, '#7fd4ff', 28, 200);
       this.telegraphs.push({ kind: 'flash', x: p.x, y: p.y, r: s.range, life: 0.45, maxLife: 0.45, color: 0x7fd4ff, final: true });
-      this.audio.play('skill');
+      this.audio.play('frost');
     }
     this.updateHUD();
     return true;
   }
-
 
   useBagItem(kind) {
     if (!this.bag || (this.bag[kind] | 0) <= 0 || this.player.dead) return false;
@@ -512,11 +501,11 @@ export class Game {
       if (this.boss && dist(this.boss.x, this.boss.y, p.x, p.y) <= 280) this.damageBoss(90, 'skill');
       burstParticles(this.particles, this.vrng, p.x, p.y, '#ff8a2a', 30, 220);
       this.shake(8, 0.2);
-      msg = 'BOOM!'; col = '#ff8a2a'; snd = 'skill';
+      msg = 'BOOM!'; col = '#ff8a2a'; snd = 'boom';
     } else if (kind === 'magnet') {
       for (const o of this.loot) { o.x = p.x; o.y = p.y; }
       for (const pk of this.pickups) { if (!pk.taken) { pk.x = p.x; pk.y = p.y; } }
-      msg = 'MAGNET!'; col = '#7fe8ff';
+      msg = 'MAGNET!'; col = '#7fe8ff'; snd = 'magnet';
     }
     addDamageNumber(this.damageNumbers, p.x, p.y - 24, msg, col, 20);
     this.audio.play(snd);
@@ -535,6 +524,7 @@ export class Game {
       this.streaks.push({ x: cx + Math.cos(a) * 60, y: cy + Math.sin(a) * 60, h: 9, t: 0 });
     }
     burstParticles(this.particles, this.vrng, cx, cy, '#ffd76a', 48, 260);
+    this.audio.play('boom');
     this.telegraphs.push({ kind: 'flash', x: cx, y: cy, r: s.range, life: 0.5, maxLife: 0.5, color: 0xffd76a, final: true });
     let hitBoss = false;
     for (const e of [...this.enemies]) {
@@ -657,7 +647,6 @@ export class Game {
     this.shakeT = time;
   }
 
-
   updateEnemies(dt) {
     const p = this.player;
 
@@ -673,7 +662,6 @@ export class Game {
       if (e.type === 'puffcap' || e.type === 'wisp') this.updatePuffcap(e, dt, d);
       else if (e.type === 'tinket') this.updateTinket(e, dt, d);
       else this.updateBrambler(e, dt, d);
-
 
       if (p.shield > 0 && d < e.radius + p.radius && e.contactCd <= 0) {
         e.contactCd = SKILLS.glassguard.contactEvery;
@@ -698,7 +686,6 @@ export class Game {
       }
     }
   }
-
 
   moveToward(e, tx, ty, dt, speed) {
     const dx = tx - e.x, dy = ty - e.y;
@@ -837,7 +824,6 @@ export class Game {
     }
   }
 
-
   updateBoss(dt) {
     const b = this.boss;
     if (!b) return;
@@ -969,7 +955,6 @@ export class Game {
     else { b.state = 'echoTel'; b.stateT = BOSS.echoDelay; b.echoMarks = []; }
   }
 
-
   updateProjectiles(dt) {
     const p = this.player;
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
@@ -1032,36 +1017,36 @@ export class Game {
         if (l.kind === 'coin') {
           this.coins++;
           this.score += LOOT.coinScore;
-          this.toastOnce('coin', '🪙 Koin = uang! Belanjakan di toko jeda wave.');
+          this.toastOnce('coin', '🪙 Coins = money! Spend them in the wave-break shop.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+2', '#ffd76a', 18);
           this.audio.play('coin');
         } else if (l.kind === 'shard') {
           this.shards++;
           this.score += LOOT.shardScore;
           p.energy = Math.min(PLAYER.energyMax, p.energy + 6);
-          this.toastOnce('shard', '💎 Kristal = bahan bakar skill! +6 energi.');
+          this.toastOnce('shard', '💎 Shards fuel skills! +6 energy.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6 ⚡', '#7fb8ff', 18);
-          this.audio.play('coin');
+          this.audio.play('shard');
         } else if (l.kind === 'magnet') {
           this.bag.magnet++;
-          this.toastOnce('magnet', '🧲 Magnet masuk tas! Pakai di tas: tarik semua item.');
+          this.toastOnce('magnet', '🧲 Magnet to bag! Use in bag: pull in all items.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 🧲', '#7fe8ff', 18);
-          this.audio.play('coin');
+          this.audio.play('pop');
         } else if (l.kind === 'bomb') {
           this.bag.bomb++;
-          this.toastOnce('bomb', '💣 Bom masuk tas! Pakai di tas: ledakan 90 dmg.');
+          this.toastOnce('bomb', '💣 Bomb to bag! Use in bag: 90 dmg blast.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 💣', '#ff8a2a', 18);
-          this.audio.play('coin');
+          this.audio.play('pop');
         } else if (l.kind === 'heart') {
           this.bag.heart++;
-          this.toastOnce('heart', '❤️ Hati masuk tas! Pakai di tas: pulih +30 HP.');
+          this.toastOnce('heart', '❤️ Heart to bag! Use in bag: heal +30 HP.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 ❤️', '#6fe08a', 18);
-          this.audio.play('coin');
+          this.audio.play('heal');
         } else if (l.kind === 'starchip') {
           this.shards += 2;
           this.score += 50;
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+50 ⭐', '#ffd76a', 20);
-          this.audio.play('coin');
+          this.audio.play('shard');
         } else {
           p.hp = Math.min(p.maxHp, p.hp + BOSS.lootHeart);
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, `+${BOSS.lootHeart}`, '#6fe08a', 18);
@@ -1133,8 +1118,6 @@ export class Game {
     }
   }
 
-
-
   updatePickups() {
     const p = this.player;
     for (const pk of this.pickups) {
@@ -1146,19 +1129,19 @@ export class Game {
           this.shards++;
           this.score += LOOT.shardScore;
           p.energy = Math.min(PLAYER.energyMax, p.energy + 6);
-          this.toastOnce('shard', '💎 Kristal = bahan bakar skill! +6 energi.');
+          this.toastOnce('shard', '💎 Shards fuel skills! +6 energy.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6 ⚡', '#7fb8ff', 18);
         } else if (pk.kind === 'coins') {
           this.coins += 3;
           this.score += 3 * LOOT.coinScore;
-          this.toastOnce('coin', '🪙 Koin = uang! Belanjakan di toko jeda wave.');
+          this.toastOnce('coin', '🪙 Coins = money! Spend them in the wave-break shop.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6', '#ffd76a', 18);
         } else {
           p.hp = Math.min(p.maxHp, p.hp + 25);
-          this.toastOnce('fieldheart', '❤️ Hati di lapangan: pulih +25 HP langsung!');
+          this.toastOnce('fieldheart', '❤️ Field heart: heal +25 HP instantly!');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+25', '#6fe08a', 18);
         }
-        this.audio.play('coin');
+        this.audio.play(pk.kind === 'heart' ? 'heal' : pk.kind === 'gem' ? 'shard' : 'coin');
         this.updateHUD();
       }
     }
@@ -1182,7 +1165,6 @@ export class Game {
       }
     }
   }
-
 
   endRun(result) {
     if (this.done) return;
@@ -1214,11 +1196,6 @@ export class Game {
     this.showResult();
     this.updateHUD();
   }
-
-
-
-
-
 
   botDodgeDir() {
     const p = this.player;
@@ -1262,7 +1239,6 @@ export class Game {
   botStep(dt) {
     const p = this.player;
     const b = this.bot;
-
 
     if (Math.hypot(p.x - b.lastX, p.y - b.lastY) < 0.5) b.stuckT += dt;
     else { b.stuckT = 0; b.lastX = p.x; b.lastY = p.y; }
@@ -1336,7 +1312,6 @@ export class Game {
       }
     } else {
 
-
       tx = FIELD_W / 2;
       ty = FIELD_H / 2;
       mode = 'idle';
@@ -1399,7 +1374,6 @@ export class Game {
     if (pick) this.buyUpgrade(pick.id);
     if (p.hp < 60 && this.coins >= 60) this.buyShop('shopHeart');
   }
-
 
   updateHUD() {
     const $ = (id) => document.getElementById(id);
@@ -1484,7 +1458,6 @@ export class Game {
     const ctx = cv.getContext('2d');
     const S = cv.width;
 
-
     const s = S / FIELD_W;
     const offY = (S - FIELD_H * s) / 2;
     const px = (x) => x * s;
@@ -1496,8 +1469,6 @@ export class Game {
     ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
     ctx.clip();
     const pal = AREAS[this.area];
-
-
 
     ctx.fillStyle = pal.floor;
     ctx.fillRect(0, 0, S, S);
@@ -1530,7 +1501,6 @@ export class Game {
     ctx.restore();
   }
 
-
   showIntermission() {
     const panel = document.getElementById('interPanel');
     const row = document.getElementById('offerRow');
@@ -1539,7 +1509,7 @@ export class Game {
     for (const o of this.offers) {
       const div = document.createElement('div');
       div.className = 'offer';
-      div.innerHTML = `<b>${o.name}</b><span>${o.desc}</span><em>${o.cost} ${o.cur === 'coin' ? '🪙' : '💎'}</em>`;
+      div.innerHTML = `<i class="ic">${o.ic}</i><b>${o.name}</b><span>${o.desc}</span><em>${o.cost} ${o.cur === 'coin' ? '🪙' : '💎'}</em>`;
       div.onclick = () => { this.buyUpgrade(o.id); this.refreshOffers(); };
       row.appendChild(div);
     }
@@ -1560,7 +1530,7 @@ export class Game {
         shopRow.appendChild(div);
       }
     }
-    if (shopCoins) shopCoins.textContent = `🪙 ${this.coins} koin — belanja di toko!`;
+    if (shopCoins) shopCoins.textContent = `🪙 ${this.coins} coins — shop at wave break!`;
     panel.classList.remove('hidden');
   }
 
@@ -1580,8 +1550,11 @@ export class Game {
     const body = document.getElementById('resultBody');
     if (title) title.textContent = this.done.result === 'victory' ? 'VICTORY' : 'DEFEAT';
     if (body) {
-      body.innerHTML = `Score <b>${this.done.score}</b> &nbsp;·&nbsp; Best ${this.done.best}<br>` +
-        `Wave ${this.done.wave} / ${WAVE_COUNT} &nbsp;·&nbsp; ${this.done.kills} kills &nbsp;·&nbsp; ${this.done.time}s<br>` +
+      body.innerHTML = `<div class="stats"><div><span>Score</span><b>${this.done.score}</b></div>` +
+        `<div><span>Best</span><b>${this.done.best}</b></div>` +
+        `<div><span>Wave</span><b>${this.done.wave} / ${WAVE_COUNT}</b></div>` +
+        `<div><span>Kills</span><b>${this.done.kills}</b></div>` +
+        `<div><span>Time</span><b>${this.done.time}s</b></div></div>` +
         (this.done.result === 'victory'
           ? 'You defeated the Gloam Bell and relit the wilds!'
           : 'The wilds keep their light… for now.');
@@ -1594,7 +1567,6 @@ export class Game {
     if (panel) panel.classList.add('hidden');
   }
 
-
   shotConditionMet() {
     const shot = this.opts.shot;
     if (!shot) return false;
@@ -1602,8 +1574,6 @@ export class Game {
     if (shot === 'intermission') return this.state === 'intermission' && this.offers.length >= 2;
     if (this.state !== 'playing') return false;
     if (shot === 'combat') {
-
-
 
       return this.wave >= 1 && this.wave <= 3 && this.waveT <= 25 && this.enemies.length >= 8 && this.loot.length >= 1;
     }
@@ -1618,7 +1588,6 @@ export class Game {
     }
     return false;
   }
-
 
   maybeRestartShot() {
     if (!this.opts.shot || this.shotReady) return false;

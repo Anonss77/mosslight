@@ -1,19 +1,14 @@
 
-
-
 import { Game, STEP } from './game.js';
 import { createWorld } from './world.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 
-
 function fitStage() {
-  const stage = document.getElementById('stage');
-  const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
-  stage.style.transform = `scale(${s})`;
+  if (world && world.resize) world.resize(window.innerWidth, window.innerHeight);
 }
 window.addEventListener('resize', fitStage);
-fitStage();
+window.addEventListener('orientationchange', fitStage);
 
 const params = new URLSearchParams(location.search);
 const seed = parseInt(params.get('seed') || '20261116', 10);
@@ -24,14 +19,12 @@ const speed = Math.max(1, Math.min(30, parseInt(params.get('speed') || '10', 10)
 const audio = new Audio();
 if (autotest || shot) audio.headless = true;
 
-
-
 const canvas = document.getElementById('game');
 const world = autotest
   ? { setField() {}, setArea() {} }
   : createWorld(canvas);
 
-if (!autotest) world.resize(1280, 720);
+if (!autotest) fitStage();
 
 const game = new Game(world, audio, { seed, autotest: autotest || !!shot, shot: shot || null, speed });
 window.__mosslight = { game, shotReady: false, done: null };
@@ -79,7 +72,6 @@ $('muteBtn').addEventListener('click', () => {
   $('muteBtn').textContent = muted ? '🔇' : '🔊';
 });
 
-
 let paused = false;
 let bagOpen = false;
 function setPaused(p) {
@@ -123,7 +115,7 @@ input.onPause = () => {
 input.onBag = () => { if (game.state === 'playing' || bagOpen) setBag(!bagOpen); };
 input.bindJoystick($('joystick'), $('joyThumb'));
 input.bindCamera($('game'));
-$('camBtn').addEventListener('click', () => { if (window.__cam) { window.__cam.az = 0; window.__cam.tilt = 38; } });
+$('camBtn').addEventListener('click', () => { if (window.__cam) { window.__cam.az = 0; window.__cam.tilt = 38; window.__cam.vaz = 0; window.__cam.vtilt = 0; } });
 for (const id of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
   input.bindSkillButton($('skill-' + id), id);
 }

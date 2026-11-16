@@ -1,6 +1,4 @@
 
-
-
 export class Input {
   constructor() {
     if (!window.__keys) window.__keys = new Set();
@@ -29,9 +27,6 @@ export class Input {
     window.addEventListener('keyup', (e) => window.__keys.delete(e.code));
     window.addEventListener('blur', () => window.__keys.clear());
   }
-
-
-
 
   bindJoystick(joyEl, thumbEl) {
     const rect = () => joyEl.getBoundingClientRect();
@@ -66,7 +61,6 @@ export class Input {
     joyEl.addEventListener('pointercancel', end);
   }
 
-
   bindSkillButton(el, skillId) {
     el.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -75,20 +69,32 @@ export class Input {
   }
 
   bindCamera(el) {
-    if (!window.__cam) window.__cam = { az: 0, tilt: 38 };
+    if (!window.__cam) window.__cam = { az: 0, tilt: 38, vaz: 0, vtilt: 0 };
     const cam = window.__cam;
     let drag = null, lastTap = 0;
+    const tick = () => {
+      if (!drag) {
+        cam.az += cam.vaz; cam.vaz *= 0.93;
+        cam.tilt = Math.max(25, Math.min(70, cam.tilt + cam.vtilt)); cam.vtilt *= 0.93;
+        if (Math.abs(cam.vaz) < 0.0001) cam.vaz = 0;
+        if (Math.abs(cam.vtilt) < 0.001) cam.vtilt = 0;
+      }
+      requestAnimationFrame(tick);
+    };
+    if (!cam.__tick) { cam.__tick = true; requestAnimationFrame(tick); }
     el.addEventListener('pointerdown', (e) => {
       const now = Date.now();
-      if (now - lastTap < 500) { cam.az = 0; cam.tilt = 38; lastTap = 0; return; }
+      if (now - lastTap < 500) { cam.az = 0; cam.tilt = 38; cam.vaz = 0; cam.vtilt = 0; lastTap = 0; return; }
       lastTap = now;
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
       try { el.setPointerCapture(e.pointerId); } catch {  }
     });
     el.addEventListener('pointermove', (e) => {
       if (!drag || e.pointerId !== drag.id) return;
-      cam.az += (e.clientX - drag.x) * 0.005;
-      cam.tilt = Math.max(25, Math.min(70, cam.tilt - (e.clientY - drag.y) * 0.12));
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      cam.vaz = dx * 0.005; cam.vtilt = -dy * 0.12;
+      cam.az += cam.vaz;
+      cam.tilt = Math.max(25, Math.min(70, cam.tilt + cam.vtilt));
       drag.x = e.clientX; drag.y = e.clientY;
     });
     const end = (e) => { if (drag && e.pointerId === drag.id) drag = null; };

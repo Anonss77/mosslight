@@ -1,9 +1,5 @@
 
-
-
-
 import { PLAYER, SKILLS, ENEMIES, BOSS, LOOT, FEEL } from './config.js';
-
 
 export class SpatialHash {
   constructor(cell = 64) {
@@ -32,7 +28,6 @@ export class SpatialHash {
     return out;
   }
 }
-
 
 let nextId = 1;
 export function freshIds() { nextId = 1; }
@@ -102,7 +97,6 @@ export function createLoot(kind, x, y, rng) {
   };
 }
 
-
 export function burstParticles(list, vrng, x, y, color, count, speed = 90) {
   for (let i = 0; i < count; i++) {
     const a = vrng.range(0, Math.PI * 2);
@@ -130,7 +124,6 @@ export function updateParticles(list, dt) {
     p.vy *= 0.94;
   }
 }
-
 
 let staggerIdx = 0;
 export function resetStagger() { staggerIdx = 0; }

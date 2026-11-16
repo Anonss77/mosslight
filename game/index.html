@@ -16,10 +16,8 @@
     background: rgba(16,32,22,0.92); color: #FFD76A; border: 2px solid #FFD76A; border-radius: 999px;
     font: bold 14px/1.4 monospace; padding: 10px 18px; text-align: center; white-space: nowrap; }
   @media (orientation: portrait) { #rotateHint { display: block; } }
-  #stage { position: relative; width: 1280px; height: 720px; flex: none; transform-origin: center center;
-    border: 2px solid rgba(245,212,90,0.35); border-radius: 10px; overflow: hidden;
-    box-shadow: 0 0 60px rgba(0,0,0,0.6), 0 0 24px rgba(255,183,48,0.12); }
-  #game { position: absolute; inset: 0; width: 1280px; height: 720px; display: block; touch-action: none; }
+  #stage { position: relative; width: 100vw; height: 100vh; flex: none; overflow: hidden; }
+  #game { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   .hidden { display: none !important; }
 
   #hud { position: absolute; inset: 0; pointer-events: none; font-family: monospace; color: #fff;
@@ -44,7 +42,7 @@
   #minimap { position: absolute; right: 24px; top: 52px; width: 140px; height: 140px; border: 3px solid rgba(255,255,255,0.85); border-radius: 50%; background: rgba(0,0,0,0.35); }
   #scoreText { position: absolute; right: 24px; top: 264px; font-size: 16px; font-weight: bold; text-align: right; }
   #toastText { position: absolute; left: 0; right: 0; top: 122px; text-align: center; font-size: 15px; font-weight: bold; color: #FFE9A8; }
-  #bossWrap { position: absolute; left: 50%; top: 104px; transform: translateX(-50%); width: 560px; text-align: center; }
+  #bossWrap { position: absolute; left: 50%; top: 104px; transform: translateX(-50%); width: min(560px, 92vw); text-align: center; }
   #bossText { font-size: 18px; font-weight: bold; margin-bottom: 3px; }
   #bossTrack { height: 18px; background: rgba(0,0,0,0.55); border: 3px solid #FFD76A; border-radius: 6px; overflow: hidden; }
   #bossFill { height: 100%; background: linear-gradient(#FFD76A, #E94F62); width: 100%; transition: width 0.15s linear; }
@@ -56,7 +54,7 @@
     border-top: 2px solid rgba(245,212,90,0.55);
     box-shadow: inset 0 18px 30px rgba(0,0,0,0.25); }
 
-  #joystick { position: absolute; left: 40px; top: 564px; width: 112px; height: 112px; border-radius: 50%;
+  #joystick { position: absolute; left: 40px; bottom: 44px; width: 112px; height: 112px; border-radius: 50%;
     background: radial-gradient(circle at 50% 50%, #0a0f0c 0 30px, rgba(10, 20, 14, 0.55) 30px 52px, rgba(10, 20, 14, 0.25) 52px 100%);
     border: 4px solid rgba(255,255,255,0.65); box-shadow: 0 6px 16px rgba(0,0,0,0.6), inset 0 2px 8px rgba(255,255,255,0.15);
     pointer-events: auto; touch-action: none; }
@@ -77,62 +75,89 @@
   .skill.ready { animation: glow 0.8s infinite alternate; border-color: #FFD76A; }
 
   @keyframes glow { from { box-shadow: 0 0 6px #FFD76A; } to { box-shadow: 0 0 22px #FFD76A; } }
-  #skill-crescent { left: 1119px; top: 490px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FF8A7A 0%, #D93A2E 70%); }
-  #skill-ember { left: 1067px; top: 530px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFB35E 0%, #E86A1A 70%); }
-  #skill-glassguard { left: 1034px; top: 652px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #9FE0FF 0%, #2A7FB8 70%); }
-  #skill-starfall { left: 1178px; top: 472px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #B8860B 70%); }
-  #skill-frost { left: 1037px; top: 587px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #BFE8FF 0%, #2A7FB8 70%); }
-  #attackBtn { left: 1172px; top: 616px; width: 76px; height: 76px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #E8A81A 55%, #B8860B 100%); border-width: 4px; }
+  #skill-crescent { right: 105px; bottom: 174px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FF8A7A 0%, #D93A2E 70%); }
+  #skill-ember { right: 157px; bottom: 134px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFB35E 0%, #E86A1A 70%); }
+  #skill-glassguard { right: 190px; bottom: 12px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #9FE0FF 0%, #2A7FB8 70%); }
+  #skill-starfall { right: 38px; bottom: 184px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #B8860B 70%); }
+  #skill-frost { right: 187px; bottom: 77px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #BFE8FF 0%, #2A7FB8 70%); }
+  #attackBtn { right: 32px; bottom: 28px; width: 76px; height: 76px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #E8A81A 55%, #B8860B 100%); border-width: 4px; }
   #attackBtn .lbl { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 10px; font-weight: bold; color: #4A2E00; text-shadow: none; }
   #muteBtn, #bagBtn, #camBtn { position: absolute; width: 56px; height: 56px; border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #3a3a48, #1c1c26); color: #fff; border: 3px solid rgba(255,255,255,0.85); font-size: 26px; cursor: pointer; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.55); }
   #muteBtn { top: 204px; right: 152px; width: 48px; height: 48px; font-size: 22px; }
   #camBtn { top: 200px; right: 88px; }
   #bagBtn { top: 200px; right: 24px; background: radial-gradient(circle at 35% 30%, #FFE9A8, #E8A81A); }
-  #bagBtn::after { content: 'TAS'; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 3px; font-size: 11px; font-weight: bold; color: #FFD76A; text-shadow: 1px 1px 0 #000; }
-  #denyText { position: absolute; right: 24px; top: 440px; font-size: 15px; font-weight: bold; color: #FF6B5E; text-align: right; }
+  #bagBtn::after { content: 'BAG'; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 3px; font-size: 11px; font-weight: bold; color: #FFD76A; text-shadow: 1px 1px 0 #000; }
+  #denyText { position: absolute; right: 24px; bottom: 260px; font-size: 15px; font-weight: bold; color: #FF6B5E; text-align: right; }
   .skill.poor { filter: grayscale(0.7) brightness(0.6); }
   .skill.poor .cost { background: #D93A2E; }
   .skill.deny { animation: denyshake 0.3s; }
   @keyframes denyshake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
-  #bagPanel { width: 620px; }
+  #bagPanel { width: min(620px, 94vw); }
   .bag-item.empty { opacity: 0.45; }
 
-  .panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center;
-    background: linear-gradient(160deg, rgba(24,48,34,0.96), rgba(12,26,18,0.96)) padding-box, linear-gradient(135deg, #FFE9A8, #FF8A2A 45%, #9BD96A) border-box;
-    border: 3px solid transparent; border-radius: 20px; padding: 28px 36px;
-    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; color: #FFF3C4; box-shadow: 0 16px 48px rgba(0,0,0,0.65); }
-  .panel h1 { margin: 0 0 6px; font-size: 58px; letter-spacing: 6px;
+  .panel { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; max-width: 94vw; max-height: 92vh; overflow-y: auto;
+    background: linear-gradient(165deg, rgba(30,62,44,0.97), rgba(10,22,16,0.97)) padding-box, linear-gradient(135deg, #FFE9A8, #FF8A2A 40%, #37A176 78%, #FFE9A8) border-box;
+    border: 3px solid transparent; border-radius: 24px; padding: 30px 38px;
+    font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; color: #FFF3C4;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,233,168,0.22), inset 0 1px 0 rgba(255,255,255,0.22); }
+  .panel::before { content: ''; position: absolute; inset: 0; border-radius: 21px; pointer-events: none;
+    background: radial-gradient(ellipse 85% 32% at 50% 0%, rgba(255,233,168,0.20), transparent 70%); }
+  .panel h1 { margin: 0 0 6px; font-size: clamp(36px, 7vw, 58px); letter-spacing: 8px;
     background: linear-gradient(#FFF3C4, #FFB347 55%, #FF8A2A); -webkit-background-clip: text; background-clip: text; color: transparent;
     filter: drop-shadow(3px 3px 0 rgba(0,0,0,0.55)); }
-  .panel h2 { margin: 0 0 14px; font-size: 30px; letter-spacing: 2px; color: #9BD96A; text-shadow: 2px 2px 0 rgba(0,0,0,0.5); }
+  .panel h2 { margin: 0 0 14px; font-size: clamp(24px, 4vw, 32px); letter-spacing: 3px; color: #FFD76A; text-shadow: 2px 2px 0 rgba(0,0,0,0.5); }
   .panel p { font-size: 16px; line-height: 1.55; margin: 8px 0; }
   .panel button { font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; font-size: 19px; font-weight: bold; padding: 13px 30px; margin: 8px 6px 0;
     background: linear-gradient(#FFE9A8, #F5C93A); color: #173F35; border: 3px solid #FFF3C4; border-radius: 12px; cursor: pointer; box-shadow: 0 5px 0 #A8842A, 0 8px 16px rgba(0,0,0,0.45); }
   .panel button:hover { background: linear-gradient(#FFF3C4, #FFE9A8); }
   .panel button:active { transform: translateY(3px); box-shadow: 0 2px 0 #A8842A, 0 4px 8px rgba(0,0,0,0.45); }
-  .panel button.ghost { background: transparent; color: #FFF3C4; border-color: #9BD96A; }
+  .panel button.ghost { background: transparent; color: #FFF3C4; border-color: #9BD96A; box-shadow: none; }
+  .secHdr { font-size: 13px !important; letter-spacing: 4px; color: #FFD76A !important; text-transform: uppercase; margin: 10px 0 0 !important; opacity: 0.95; }
   #seedInput { font-family: monospace; font-size: 17px; padding: 10px 12px; width: 170px; text-align: center;
     background: #173F35; color: #FFF3C4; border: 2px solid #9BD96A; border-radius: 8px; }
-  .tiles { display: flex; gap: 10px; justify-content: center; margin: 14px 0 4px; }
-  .tile { width: 120px; padding: 10px 6px; border-radius: 12px; font-size: 13px; font-weight: bold; color: #fff; text-shadow: 1px 1px 0 #000; box-shadow: 0 6px 14px rgba(0,0,0,0.45), inset 0 2px 0 rgba(255,255,255,0.35); }
-  .tile .ic { display: block; font-size: 28px; line-height: 1.2; text-shadow: none; }
+  .tiles { display: flex; gap: 10px; justify-content: center; margin: 14px 0 4px; flex-wrap: wrap; }
+  .tile { width: 120px; padding: 12px 6px 10px; border-radius: 14px; font-size: 13px; font-weight: bold; color: #fff; text-shadow: 1px 1px 0 #000;
+    border: 2px solid rgba(255,255,255,0.4); box-shadow: 0 8px 18px rgba(0,0,0,0.5), inset 0 2px 0 rgba(255,255,255,0.35); }
+  .tile .ic { display: block; font-size: 30px; line-height: 1.2; text-shadow: none; }
   #seedHint { font-size: 12px; opacity: 0.85; margin: 4px 0 0; }
-  #interPanel { width: 620px; }
-  #offerRow, #shopRow { display: flex; gap: 12px; justify-content: center; margin: 14px 0; }
-  #shopRow { margin-top: 4px; }
+  #interPanel { width: min(680px, 94vw); }
+  #offerRow, #shopRow { display: flex; gap: 12px; justify-content: center; margin: 14px 0; flex-wrap: wrap; }
+  #shopRow { margin-top: 6px; }
   .offer.shop { width: 140px; padding: 12px 8px; }
   .offer.shop b { font-size: 15px; }
   .offer.off { opacity: 0.45; }
-  .offer { display: block; width: 180px; padding: 16px 10px; background: linear-gradient(165deg, #2E8563, #1B4A35); border: 2px solid #9BD96A;
-    border-radius: 14px; color: #FFF3C4; font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; cursor: pointer; text-align: center; box-shadow: 0 6px 16px rgba(0,0,0,0.4); }
-  .offer:hover { background: linear-gradient(165deg, #37A176, #22603F); transform: translateY(-2px); }
+  .offer { display: block; width: 180px; padding: 14px 10px 12px; background: linear-gradient(170deg, #2E8563, #123524); border: 2px solid rgba(155,217,106,0.75);
+    border-radius: 16px; color: #FFF3C4; font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; cursor: pointer; text-align: center;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.22); }
+  .offer:hover { background: linear-gradient(170deg, #37A176, #1B4A35); transform: translateY(-3px); border-color: #FFD76A; box-shadow: 0 12px 24px rgba(0,0,0,0.5), 0 0 14px rgba(255,215,106,0.35); }
+  .offer .ic { display: block; font-size: 30px; line-height: 1.2; margin-bottom: 2px; }
   .offer b { display: block; font-size: 17px; color: #FFD76A; margin-bottom: 4px; text-shadow: 1px 1px 0 rgba(0,0,0,0.5); }
-  .panel .offer { background: linear-gradient(165deg, #2E8563, #1B4A35); color: #FFF3C4; padding: 16px 10px; }
+  .panel .offer { background: linear-gradient(170deg, #2E8563, #123524); color: #FFF3C4; padding: 14px 10px 12px; }
   .offer span { display: block; font-size: 12px; line-height: 1.4; min-height: 34px; }
-  .offer em { display: block; font-style: normal; font-size: 14px; font-weight: bold; margin-top: 6px; }
-  .offer.skip { background: transparent; }
+  .offer em { display: inline-block; font-style: normal; font-size: 14px; font-weight: bold; margin-top: 8px;
+    background: rgba(0,0,0,0.38); border: 1px solid rgba(255,215,106,0.65); border-radius: 999px; padding: 3px 12px; }
+  .offer.skip { background: rgba(0,0,0,0.25); border-color: rgba(255,255,255,0.35); }
+  .stats { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 16px 0 8px; }
+  .stats div { background: rgba(0,0,0,0.38); border: 1px solid rgba(255,215,106,0.45); border-radius: 12px; padding: 10px 14px; min-width: 84px; }
+  .stats span { display: block; font-size: 11px; letter-spacing: 2px; color: #9BD96A; text-transform: uppercase; margin-bottom: 2px; }
+  .stats b { font-size: 22px; color: #FFE9A8; }
   #resultBody { font-size: 17px; line-height: 1.6; }
+
+  @media (max-width: 700px) {
+    .panel { padding: 20px 16px; border-radius: 18px; }
+    .panel h1 { letter-spacing: 4px; }
+    .panel p { font-size: 14px; }
+    .offer { width: 140px; padding: 12px 8px; }
+    .offer.shop { width: 120px; }
+    #joystick { left: 24px; bottom: 32px; width: 96px; height: 96px; }
+    #joyThumb { left: 28px; top: 28px; width: 40px; height: 40px; }
+    .skill { width: 48px !important; height: 48px !important; }
+    .skill svg { inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); }
+    #buildText { display: none; }
+    #hpBar, #hpText { width: 200px; }
+    #energyBar, #energyText { width: 160px; }
+  }
 </style>
 </head>
 <body>
@@ -182,26 +207,26 @@
     </div>
     <div class="skill" id="attackBtn" title="Basic Attack (J / Space)">
       <svg viewBox="0 0 32 32"><path d="M6 26 L20 12 M20 12 L26 5 L27 6 L21 13 M20 12 L24 17 L22 18 L17 14 Z" fill="#4A2E00"/><path d="M5 27 L8 24 L24 8 L27 5 L28 8 L12 24 Z" fill="#4A2E00" opacity="0.55"/></svg>
-      <div class="cd"></div><div class="key">J</div><div class="lbl">SERANG</div>
+      <div class="cd"></div><div class="key">J</div><div class="lbl">ATTACK</div>
     </div>
     <div id="denyText"></div>
     <button id="muteBtn" title="Mute">🔊</button>
-    <button id="camBtn" title="Reset kamera">🧭</button>
+    <button id="camBtn" title="Reset camera">🧭</button>
     <button id="bagBtn" title="Backpack (B)">🎒</button>
   </div>
-  <div id="rotateHint">🔄 Putar HP ke landscape untuk layar penuh</div>
+  <div id="rotateHint">🔄 Rotate your phone to landscape for fullscreen</div>
 
   <div id="titlePanel" class="panel">
     <h1>MOSSLIGHT</h1>
     <h2>A bright open-world survival</h2>
     <p>Help <b>Neri</b> survive 8 waves and defeat the <b>Gloam Bell</b>.<br>
-    Attacks are automatic — tap <b>SERANG</b> for extra bolts, time your skills.</p>
+    Attacks are automatic — tap <b>ATTACK</b> for extra bolts, time your skills.</p>
     <div class="tiles">
       <div class="tile" style="background:linear-gradient(160deg,#8FE07A,#3E8A52)"><span class="ic">🌸</span>Bloomroot<br>Warrens</div>
       <div class="tile" style="background:linear-gradient(160deg,#FF9A5E,#C85A28)"><span class="ic">🔥</span>Cinderglass<br>Works</div>
       <div class="tile" style="background:linear-gradient(160deg,#C3A8EE,#7A5FC0)"><span class="ic">🌙</span>Moonmilk<br>Vault</div>
     </div>
-    <p>Move: WASD / arrows / joystick &nbsp;·&nbsp; Attack: J / Space &nbsp;·&nbsp; Skills: Q E R F C &nbsp;·&nbsp; Bag: B<br>Drag layar kosong: putar kamera &nbsp;·&nbsp; 🧭: reset kamera</p>
+    <p>Move: WASD / arrows / joystick &nbsp;·&nbsp; Attack: J / Space &nbsp;·&nbsp; Skills: Q E R F C &nbsp;·&nbsp; Bag: B<br>Drag empty area: rotate camera &nbsp;·&nbsp; 🧭: reset camera</p>
     <p>Seed: <input id="seedInput" value="" inputmode="numeric" placeholder="random"> <button id="startBtn">▶ START</button></p>
     <p id="seedHint">Seed = world code. Same number = same world. Empty = random.</p>
     <p id="bestScore">Best: 0 pts</p>
@@ -211,7 +236,8 @@
     <h2>🌟 WAVE CLEARED! 🌟</h2>
     <p>Next wave in 20s — pick an upgrade!</p>
     <div id="offerRow"></div>
-    <p id="shopCoins">🪙 0 koin — belanja di toko!</p>
+    <p id="shopCoins">🪙 0 coins — shop at wave break!</p>
+    <p class="secHdr">🛒 SHOP</p>
     <div id="shopRow"></div>
   </div>
 
@@ -227,9 +253,9 @@
     <h2>🎒 BACKPACK</h2>
     <p id="bagCoins">🪙 0 &nbsp; 💎 0</p>
     <div id="offerRow">
-      <button class="offer bag-item" id="bag-heart"><b>❤️ Hati</b><span>Obat: pulihkan +30 HP</span><em id="bagHeartN">x0</em></button>
-      <button class="offer bag-item" id="bag-bomb"><b>💣 Bom</b><span>Ledakan 90 dmg, musuh dekat (280px)</span><em id="bagBombN">x0</em></button>
-      <button class="offer bag-item" id="bag-magnet"><b>🧲 Magnet</b><span>Tarik SEMUA item ke kamu</span><em id="bagMagnetN">x0</em></button>
+      <button class="offer bag-item" id="bag-heart"><b>❤️ Heart</b><span>Medicine: heal +30 HP</span><em id="bagHeartN">x0</em></button>
+      <button class="offer bag-item" id="bag-bomb"><b>💣 Bomb</b><span>90 dmg blast, nearby enemies (280px)</span><em id="bagBombN">x0</em></button>
+      <button class="offer bag-item" id="bag-magnet"><b>🧲 Magnet</b><span>Pull ALL items to you</span><em id="bagMagnetN">x0</em></button>
     </div>
     <p style="font-size:13px">Tap an item to use it. The game pauses while the bag is open.</p>
     <button id="bagCloseBtn">✕ Close (B)</button>

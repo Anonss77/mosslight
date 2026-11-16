@@ -1,9 +1,4 @@
 
-
-
-
-
-
 import * as THREE from 'three';
 import { TILE, FIELD_W, FIELD_H, AREAS, CAM } from './config.js';
 import { makeRng } from './random.js';
@@ -20,7 +15,6 @@ import { GLTFLoader } from '../vendor/loaders/GLTFLoader.js';
 const PX = 1 / TILE;
 const toX = (px) => px * PX;
 const toZ = (py) => py * PX;
-
 
 function tileHash(tx, ty) {
   let h = (tx * 374761393 + ty * 668265263) | 0;
@@ -47,9 +41,6 @@ export function createWorld(canvas) {
   scene.add(propGroup);
   let chestMeshes = [];
   let statueMeshes = [];
-
-
-
 
   let skyTex = null;
   function shade(hex, f) {
@@ -149,7 +140,6 @@ export function createWorld(canvas) {
     }
   }
 
-
   const PROP_KINDS = [
     ['flower', 'tuft', 'pond', 'mushroom', 'tree', 'bush', 'stump'],
     ['anvil', 'gear', 'furnace', 'crystal', 'rock', 'barrel', 'crate'],
@@ -233,7 +223,6 @@ export function createWorld(canvas) {
       return { ...built, data: s };
     });
   }
-
 
   const enemyMeshes = new Map();
   const hpBars = new Map();
@@ -400,9 +389,6 @@ export function createWorld(canvas) {
     d.tex.needsUpdate = true;
   }
 
-
-
-
   function makeHpBar(w) {
     const g = new THREE.Group();
     const bg = new THREE.Mesh(
@@ -444,7 +430,6 @@ export function createWorld(canvas) {
     t.parts.fill.material.color.set(color);
     return t;
   }
-
 
   function setField(f) {
     field = f;
@@ -622,7 +607,6 @@ export function createWorld(canvas) {
       if (!seenLoot.has(id)) { scene.remove(lm.group); lootMeshes.delete(id); }
     }
 
-
     const seenPickups = new Set();
     for (const pk of sim.pickups || []) {
       if (pk.taken) continue;
@@ -776,13 +760,9 @@ export function createWorld(canvas) {
       si++;
     }
 
-
-
-
     const FW = FIELD_W / TILE, FH = FIELD_H / TILE;
     let tx = toX(p.x);
     const tz = Math.max(9, Math.min(FH - 9, toZ(p.y)));
-
 
     if (sim.state === 'title') tx -= CAM.titleShiftX;
     tx = Math.max(sim.state === 'title' ? FW / 2 - 24 : 14, Math.min(FW - 14, tx));

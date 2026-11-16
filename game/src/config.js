@@ -1,5 +1,4 @@
 
-
 export const TILE = 16;
 export const FIELD_W = 2400;
 export const FIELD_H = 1800;
@@ -7,12 +6,8 @@ export const WORLD_W = FIELD_W;
 export const WORLD_H = FIELD_H;
 export const UNIT = TILE;
 
-
-
-
-
 export const COS05 = 0.8775825618903728, SIN05 = 0.479425538604203;
-// NO trig in sim: sin/cos/atan2 desync Node vs Chrome by 1 ULP (v6) — literals only.
+
 export const COS06 = 0.8253356149096783, SIN06 = 0.5646424733950355;
 
 export const FAN_OFF = [
@@ -23,7 +18,6 @@ export const FAN_OFF = [
   { c: 0.9135454576426009, s: 0.4067366430758002 },
 ];
 
-
 export const WAVE_TIME = 50;
 export const INTERMISSION_TIME = 20;
 export const WAVE_COUNT = 8;
@@ -32,8 +26,6 @@ export const SPAWN_GROUP_EVERY = 7;
 export const SPAWN_MIN_DIST = 240;
 export const VICTORY_BONUS = 5000;
 export const DEFEAT_PER_WAVE = 100;
-
-
 
 export const WAVES = [
   { area: 0, groups: 5, perGroup: 5, hpMul: 1.0, spMul: 1.0 },
@@ -46,7 +38,6 @@ export const WAVES = [
   { area: 2, groups: 4, perGroup: 5, hpMul: 1.5, spMul: 1.15, boss: true },
 ];
 export const AREA_NAMES = ['Bloomroot Warrens', 'Cinderglass Works', 'Moonmilk Vault'];
-
 
 export const PLAYER = {
   maxHp: 100,
@@ -70,7 +61,6 @@ export const SKILLS = {
   starfall: { name: 'Starfall', cost: 100, cd: 30, windup: 0.6, range: 135, damage: 90, knockback: 90,  },
   frost: { name: 'Frost Nova', cost: 35, cd: 10, range: 200, freeze: 2.5, damage: 10,  },
 };
-
 
 export const ENEMIES = {
   puffcap: {
@@ -110,7 +100,6 @@ export const BRAMBLER_MAX_PER_GROUP_LATE = 2;
 export const WISP_FROM_WAVE = 2;
 export const BULWARK_FROM_WAVE = 4;
 
-
 export const BOSS = {
   name: 'The Gloam Bell',
   hp: 1300,
@@ -145,7 +134,6 @@ export const BOSS = {
   lootHeart: 30,
 };
 
-
 export const LOOT = {
   lifetime: 20,
   magnetRange: 90,
@@ -164,21 +152,19 @@ export const LOOT = {
   statueTime: 1.2,
 };
 
-
-export const UPGRADES = [  { id: 'wick', name: 'Bright Wick', cost: 12, cur: 'coin', max: 2, desc: 'Bolt +3 damage' },
-  { id: 'hands', name: 'Quick Hands', cost: 10, cur: 'coin', max: 2, desc: 'Bolt interval -0.08s' },
-  { id: 'thread', name: 'Long Thread', cost: 10, cur: 'coin', max: 2, desc: 'Bolt range +35px' },
-  { id: 'cape', name: 'Padded Cape', cost: 14, cur: 'coin', max: 2, desc: '+20 max HP, heal 20' },
-  { id: 'charm', name: 'Shard Charm', cost: 2, cur: 'shard', max: 1, desc: 'Crescent +10, Ember tick +3, Starfall +15' },
+export const UPGRADES = [  { id: 'wick', name: 'Bright Wick', cost: 12, cur: 'coin', max: 2, desc: 'Bolt +3 damage', ic: '🕯️' },
+  { id: 'hands', name: 'Quick Hands', cost: 10, cur: 'coin', max: 2, desc: 'Bolt interval -0.08s', ic: '⚡' },
+  { id: 'thread', name: 'Long Thread', cost: 10, cur: 'coin', max: 2, desc: 'Bolt range +35px', ic: '🧵' },
+  { id: 'cape', name: 'Padded Cape', cost: 14, cur: 'coin', max: 2, desc: '+20 max HP, heal 20', ic: '🧥' },
+  { id: 'charm', name: 'Shard Charm', cost: 2, cur: 'shard', max: 1, desc: 'Crescent +10, Ember tick +3, Starfall +15', ic: '💎' },
 ];
 
 export const SHOP = [
-  { id: 'shopHeart', name: '❤️ Hati', desc: 'Pulihkan +30 HP', cost: 60 },
-  { id: 'shopEnergy', name: '⚡ Energi', desc: 'Isi +50 energi skill', cost: 45 },
-  { id: 'shopBomb', name: '💣 Bom', desc: '+1 bom ke tas', cost: 35 },
-  { id: 'shopMagnet', name: '🧲 Magnet', desc: '+1 magnet ke tas', cost: 30 },
+  { id: 'shopHeart', name: '❤️ Heart', desc: 'Heal +30 HP', cost: 60 },
+  { id: 'shopEnergy', name: '⚡ Energy', desc: 'Restore +50 skill energy', cost: 45 },
+  { id: 'shopBomb', name: '💣 Bomb', desc: '+1 bomb to bag', cost: 35 },
+  { id: 'shopMagnet', name: '🧲 Magnet', desc: '+1 magnet to bag', cost: 30 },
 ];
-
 
 export const FEEL = {
   hitstopBolt: 2,
@@ -197,7 +183,6 @@ export const FEEL = {
   lowHpPulseHz: 2,
   lowHpWarnEvery: 5,
 };
-
 
 export const AREAS = [
   {
@@ -220,7 +205,6 @@ export const AREAS = [
   },
 ];
 
-
 export const CAM = {
   fov: 50,
   tiltDeg: 38,
@@ -235,7 +219,6 @@ export const CAM = {
   maxPitch: 0.35,
   titleShiftX: 9,
 };
-
 
 export const HUD = {
   hpW: 280, hpH: 26,

@@ -1,6 +1,4 @@
 
-
-
 export function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {
@@ -10,7 +8,6 @@ export function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-
 
 export function makeRng(seed) {
   const next = mulberry32(seed);
@@ -34,9 +31,6 @@ export function makeRng(seed) {
     },
 
     chance(p) { return next() < p; },
-
-
-
 
     unit() {
       const x = this.range(-1, 1), y = this.range(-1, 1);

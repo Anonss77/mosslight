@@ -1,8 +1,5 @@
 
-
-
 import * as THREE from 'three';
-
 
 export const lam = (color, opts = {}) => new THREE.MeshLambertMaterial({ color, ...opts });
 export const phong = (color, opts = {}) => new THREE.MeshPhongMaterial({ color, shininess: 60, ...opts });
@@ -35,7 +32,6 @@ export function blobShadow(radius, opacity = 0.32) {
   return m;
 }
 
-
 export function enemyRing(r) {
   const m = new THREE.Mesh(
     new THREE.RingGeometry(r * 0.8, r, 24),
@@ -45,7 +41,6 @@ export function enemyRing(r) {
   m.position.y = 0.04;
   return m;
 }
-
 
 export function makeGlowTexture() {
   const cv = document.createElement('canvas');
@@ -115,8 +110,6 @@ export function buildMoth() {
   return moth;
 }
 
-
-
 export function buildPuffcap(v = 0) {
   const g = new THREE.Group();
   const stem = mesh(new THREE.CylinderGeometry(0.24, 0.32, 0.55, 10), lam(0xfff3c4), 0, 0.28, 0);
@@ -139,7 +132,6 @@ export function buildPuffcap(v = 0) {
   g.add(enemyRing(0.66));
   return { group: g, parts: { cap, stem } };
 }
-
 
 export function buildTinket(v = 0) {
   const g = new THREE.Group();
@@ -176,7 +168,6 @@ export function buildTinket(v = 0) {
   return { group: g, parts: { body, key } };
 }
 
-
 export function buildBrambler(v = 0) {
   const g = new THREE.Group();
   const stump = mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.85, 10), lam(pick([0x8a5a3a, 0x7a4a30, 0x9a6a44], v)), 0, 0.43, 0);
@@ -208,7 +199,6 @@ export function buildBrambler(v = 0) {
   return { group: g, parts: { stump, top } };
 }
 
-
 export function buildWisp() {
   const g = new THREE.Group();
   const orb = mesh(new THREE.SphereGeometry(0.34, 12, 10), basic(0x7fe8ff, { transparent: true, opacity: 0.9 }), 0, 0.75, 0);
@@ -224,7 +214,6 @@ export function buildWisp() {
   g.add(enemyRing(0.5));
   return { group: g, parts: { orb } };
 }
-
 
 export function buildBulwark() {
   const g = new THREE.Group();
@@ -242,7 +231,6 @@ export function buildBulwark() {
   g.add(enemyRing(0.9));
   return { group: g, parts: { slab } };
 }
-
 
 export function buildBoss() {
   const g = new THREE.Group();
@@ -281,7 +269,6 @@ export function buildBoss() {
   g.add(ring);
   return { group: g, parts: { body, dome, rim, clapper, glow } };
 }
-
 
 export function buildCoin() {
   const g = new THREE.Group();
@@ -371,7 +358,6 @@ export function buildStatue() {
   g.add(ring);
   return { group: g, parts: { ring } };
 }
-
 
 export function buildProp(area, kind) {
   const g = new THREE.Group();
@@ -489,7 +475,6 @@ export function buildProp(area, kind) {
   }
   return { group: g, parts: {} };
 }
-
 
 export function buildSlash() {
   const g = new THREE.Group();

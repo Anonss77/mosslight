@@ -1,12 +1,8 @@
 
-
-
-
 import { FIELD_W, FIELD_H } from './config.js';
 import { makeRng } from './random.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
-
 
 export function hashField(f) {
   let h = 0x811c9dc5;
@@ -20,23 +16,19 @@ export function hashField(f) {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-
 export function clampField(x, y, r) {
   return { x: clamp(x, r, FIELD_W - r), y: clamp(y, r, FIELD_H - r) };
 }
 
-
 export function moveField(x, y, r, dx, dy) {
   return clampField(x + dx, y + dy, r);
 }
-
 
 export function spawnPoint(rng, px, py, minDist) {
   const u = rng.unit();
   const d = minDist + rng.range(0, 260);
   return clampField(px + u.x * d, py + u.y * d, 24);
 }
-
 
 function scatter(rng, n, minR) {
   const cx = FIELD_W / 2, cy = FIELD_H / 2;
@@ -52,7 +44,6 @@ function scatter(rng, n, minR) {
   }
   return out;
 }
-
 
 export function generateField(seed) {
   const rng = makeRng(seed);
