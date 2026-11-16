@@ -42,7 +42,8 @@
   #nextText { position: absolute; left: 0; right: 0; top: 96px; text-align: center; font-size: 14px; opacity: 0.9; }
   #buildText { position: absolute; left: 24px; top: 96px; width: 280px; font-size: 13px; opacity: 0.9; }
   #minimap { position: absolute; right: 24px; top: 52px; width: 140px; height: 140px; border: 3px solid rgba(255,255,255,0.85); border-radius: 50%; background: rgba(0,0,0,0.35); }
-  #scoreText { position: absolute; right: 24px; top: 200px; font-size: 16px; font-weight: bold; text-align: right; }
+  #scoreText { position: absolute; right: 24px; top: 264px; font-size: 16px; font-weight: bold; text-align: right; }
+  #toastText { position: absolute; left: 0; right: 0; top: 122px; text-align: center; font-size: 15px; font-weight: bold; color: #FFE9A8; }
   #bossWrap { position: absolute; left: 50%; top: 104px; transform: translateX(-50%); width: 560px; text-align: center; }
   #bossText { font-size: 18px; font-weight: bold; margin-bottom: 3px; }
   #bossTrack { height: 18px; background: rgba(0,0,0,0.55); border: 3px solid #FFD76A; border-radius: 6px; overflow: hidden; }
@@ -75,24 +76,21 @@
   .skill.cooling { filter: brightness(0.75) saturate(0.8); }
   .skill.ready { animation: glow 0.8s infinite alternate; border-color: #FFD76A; }
 
-  .skill-name { position: absolute; width: 76px; font-size: 10px; font-weight: bold; text-align: center; color: #FFF3C4; }
-  #name-crescent { left: 1012px; top: 664px; }
-  #name-ember { left: 1086px; top: 606px; }
-  #name-glassguard { left: 1152px; top: 664px; }
-  #name-starfall { left: 1082px; top: 700px; }
-  #name-frost { left: 942px; top: 606px; }
   @keyframes glow { from { box-shadow: 0 0 6px #FFD76A; } to { box-shadow: 0 0 22px #FFD76A; } }
-  #skill-crescent { left: 1018px; top: 596px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FF8A7A 0%, #D93A2E 70%); }
-  #skill-ember { left: 1092px; top: 538px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FFB35E 0%, #E86A1A 70%); }
-  #skill-glassguard { left: 1158px; top: 596px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #9FE0FF 0%, #2A7FB8 70%); }
-  #skill-starfall { left: 1084px; top: 624px; width: 72px; height: 72px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #B8860B 70%); }
-  #skill-frost { left: 948px; top: 538px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #BFE8FF 0%, #2A7FB8 70%); }
-  #muteBtn, #bagBtn { position: absolute; right: 24px; width: 56px; height: 56px; border-radius: 50%;
+  #skill-crescent { left: 1119px; top: 490px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FF8A7A 0%, #D93A2E 70%); }
+  #skill-ember { left: 1067px; top: 530px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFB35E 0%, #E86A1A 70%); }
+  #skill-glassguard { left: 1034px; top: 652px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #9FE0FF 0%, #2A7FB8 70%); }
+  #skill-starfall { left: 1178px; top: 472px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #B8860B 70%); }
+  #skill-frost { left: 1037px; top: 587px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #BFE8FF 0%, #2A7FB8 70%); }
+  #attackBtn { left: 1172px; top: 616px; width: 76px; height: 76px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #E8A81A 55%, #B8860B 100%); border-width: 4px; }
+  #attackBtn .lbl { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 10px; font-weight: bold; color: #4A2E00; text-shadow: none; }
+  #muteBtn, #bagBtn, #camBtn { position: absolute; width: 56px; height: 56px; border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #3a3a48, #1c1c26); color: #fff; border: 3px solid rgba(255,255,255,0.85); font-size: 26px; cursor: pointer; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.55); }
-  #muteBtn { top: 228px; }
-  #bagBtn { top: 296px; background: radial-gradient(circle at 35% 30%, #FFE9A8, #E8A81A); }
+  #muteBtn { top: 204px; right: 152px; width: 48px; height: 48px; font-size: 22px; }
+  #camBtn { top: 200px; right: 88px; }
+  #bagBtn { top: 200px; right: 24px; background: radial-gradient(circle at 35% 30%, #FFE9A8, #E8A81A); }
   #bagBtn::after { content: 'TAS'; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 3px; font-size: 11px; font-weight: bold; color: #FFD76A; text-shadow: 1px 1px 0 #000; }
-  #denyText { position: absolute; right: 24px; top: 496px; font-size: 15px; font-weight: bold; color: #FF6B5E; text-align: right; }
+  #denyText { position: absolute; right: 24px; top: 440px; font-size: 15px; font-weight: bold; color: #FF6B5E; text-align: right; }
   .skill.poor { filter: grayscale(0.7) brightness(0.6); }
   .skill.poor .cost { background: #D93A2E; }
   .skill.deny { animation: denyshake 0.3s; }
@@ -121,7 +119,11 @@
   .tile .ic { display: block; font-size: 28px; line-height: 1.2; text-shadow: none; }
   #seedHint { font-size: 12px; opacity: 0.85; margin: 4px 0 0; }
   #interPanel { width: 620px; }
-  #offerRow { display: flex; gap: 12px; justify-content: center; margin: 14px 0; }
+  #offerRow, #shopRow { display: flex; gap: 12px; justify-content: center; margin: 14px 0; }
+  #shopRow { margin-top: 4px; }
+  .offer.shop { width: 140px; padding: 12px 8px; }
+  .offer.shop b { font-size: 15px; }
+  .offer.off { opacity: 0.45; }
   .offer { display: block; width: 180px; padding: 16px 10px; background: linear-gradient(165deg, #2E8563, #1B4A35); border: 2px solid #9BD96A;
     border-radius: 14px; color: #FFF3C4; font-family: 'Trebuchet MS', 'Segoe UI', sans-serif; cursor: pointer; text-align: center; box-shadow: 0 6px 16px rgba(0,0,0,0.4); }
   .offer:hover { background: linear-gradient(165deg, #37A176, #22603F); transform: translateY(-2px); }
@@ -148,6 +150,7 @@
     <div id="nextText"></div>
     <div id="fightText"></div>
     <div id="buildText"></div>
+    <div id="toastText"></div>
     <div id="coinLine">🪙 <span id="coinCount">0</span> COINS &nbsp; 💎 <span id="shardCount">0</span> SHARDS</div>
     <canvas id="minimap" width="140" height="140"></canvas>
     <div id="scoreText">Score 0</div>
@@ -157,19 +160,19 @@
     </div>
     <div id="deck"></div>
     <div id="joystick"><div id="joyThumb"></div></div>
-    <div class="skill" id="skill-crescent" title="Crescent Cut (J)">
+    <div class="skill" id="skill-crescent" title="Crescent Cut (Q)">
       <svg viewBox="0 0 32 32"><path d="M21 4 A13 13 0 1 0 21 28 A10 10 0 1 1 21 4 Z" fill="#FFFFFF"/></svg>
       <div class="cd"></div><div class="cost">20</div><div class="key">Q</div>
     </div>
-    <div class="skill" id="skill-ember" title="Ember Bloom (K)">
+    <div class="skill" id="skill-ember" title="Ember Bloom (E)">
       <svg viewBox="0 0 32 32"><path d="M16 3 C18 8 25 11 25 19 A9 9 0 1 1 7 19 C7 14 11 12 12 8 C13 10 14 11 15 10 C15 7 15 5 16 3 Z" fill="#FF8A2A"/><path d="M16 16 C17 18 20 19 20 22 A4 4 0 1 1 12 22 C12 20 14 18 16 16 Z" fill="#FFD76A"/></svg>
       <div class="cd"></div><div class="cost">30</div><div class="key">E</div>
     </div>
-    <div class="skill" id="skill-glassguard" title="Glassguard (L)">
+    <div class="skill" id="skill-glassguard" title="Glassguard (R)">
       <svg viewBox="0 0 32 32"><path d="M16 3 L27 7 V16 C27 23 22 27 16 29 C10 27 5 23 5 16 V7 Z" fill="#7FD4FF"/><path d="M16 3 L27 7 V16 C27 20 25 24 22 26 L16 10 Z" fill="#B9F0F2" opacity="0.7"/><path d="M16 8 L21 10 V16 C21 20 19 23 16 24 C13 23 11 20 11 16 V10 Z" fill="#EAFBFF"/></svg>
       <div class="cd"></div><div class="cost">25</div><div class="key">R</div>
     </div>
-    <div class="skill" id="skill-starfall" title="Starfall (Space)">
+    <div class="skill" id="skill-starfall" title="Starfall (F)">
       <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="#B9A9F0" stroke-width="2.5"/><path d="M16 2 L18.5 13.5 L30 16 L18.5 18.5 L16 30 L13.5 18.5 L2 16 L13.5 13.5 Z" fill="#FFD76A"/></svg>
       <div class="cd"></div><div class="cost">100</div><div class="key">F</div>
     </div>
@@ -177,13 +180,13 @@
       <svg viewBox="0 0 32 32"><path d="M16 3 V29 M5 9 L27 23 M27 9 L5 23" stroke="#BFE8FF" stroke-width="3" stroke-linecap="round"/><circle cx="16" cy="16" r="4" fill="#FFFFFF"/></svg>
       <div class="cd"></div><div class="cost">35</div><div class="key">C</div>
     </div>
-    <div class="skill-name" id="name-crescent">Crescent</div>
-    <div class="skill-name" id="name-ember">Ember</div>
-    <div class="skill-name" id="name-glassguard">Glassguard</div>
-    <div class="skill-name" id="name-starfall">Starfall</div>
-    <div class="skill-name" id="name-frost">Frost</div>
+    <div class="skill" id="attackBtn" title="Basic Attack (J / Space)">
+      <svg viewBox="0 0 32 32"><path d="M6 26 L20 12 M20 12 L26 5 L27 6 L21 13 M20 12 L24 17 L22 18 L17 14 Z" fill="#4A2E00"/><path d="M5 27 L8 24 L24 8 L27 5 L28 8 L12 24 Z" fill="#4A2E00" opacity="0.55"/></svg>
+      <div class="cd"></div><div class="key">J</div><div class="lbl">SERANG</div>
+    </div>
     <div id="denyText"></div>
     <button id="muteBtn" title="Mute">🔊</button>
+    <button id="camBtn" title="Reset kamera">🧭</button>
     <button id="bagBtn" title="Backpack (B)">🎒</button>
   </div>
   <div id="rotateHint">🔄 Putar HP ke landscape untuk layar penuh</div>
@@ -192,13 +195,13 @@
     <h1>MOSSLIGHT</h1>
     <h2>A bright open-world survival</h2>
     <p>Help <b>Neri</b> survive 8 waves and defeat the <b>Gloam Bell</b>.<br>
-    Attacks are automatic — you move, dodge, and time your skills.</p>
+    Attacks are automatic — tap <b>SERANG</b> for extra bolts, time your skills.</p>
     <div class="tiles">
       <div class="tile" style="background:linear-gradient(160deg,#8FE07A,#3E8A52)"><span class="ic">🌸</span>Bloomroot<br>Warrens</div>
       <div class="tile" style="background:linear-gradient(160deg,#FF9A5E,#C85A28)"><span class="ic">🔥</span>Cinderglass<br>Works</div>
       <div class="tile" style="background:linear-gradient(160deg,#C3A8EE,#7A5FC0)"><span class="ic">🌙</span>Moonmilk<br>Vault</div>
     </div>
-    <p>Move: WASD / arrows / joystick &nbsp;·&nbsp; Skills: Q E R F C &nbsp;·&nbsp; Bag: B</p>
+    <p>Move: WASD / arrows / joystick &nbsp;·&nbsp; Attack: J / Space &nbsp;·&nbsp; Skills: Q E R F C &nbsp;·&nbsp; Bag: B<br>Drag layar kosong: putar kamera &nbsp;·&nbsp; 🧭: reset kamera</p>
     <p>Seed: <input id="seedInput" value="" inputmode="numeric" placeholder="random"> <button id="startBtn">▶ START</button></p>
     <p id="seedHint">Seed = world code. Same number = same world. Empty = random.</p>
     <p id="bestScore">Best: 0 pts</p>
@@ -208,6 +211,8 @@
     <h2>🌟 WAVE CLEARED! 🌟</h2>
     <p>Next wave in 20s — pick an upgrade!</p>
     <div id="offerRow"></div>
+    <p id="shopCoins">🪙 0 koin — belanja di toko!</p>
+    <div id="shopRow"></div>
   </div>
 
   <div id="pausePanel" class="panel hidden">
@@ -222,9 +227,9 @@
     <h2>🎒 BACKPACK</h2>
     <p id="bagCoins">🪙 0 &nbsp; 💎 0</p>
     <div id="offerRow">
-      <button class="offer bag-item" id="bag-heart"><b>❤️ Heart</b><span>Heal +20 HP</span><em id="bagHeartN">x0</em></button>
-      <button class="offer bag-item" id="bag-bomb"><b>💣 Bomb</b><span>Blast nearby enemies</span><em id="bagBombN">x0</em></button>
-      <button class="offer bag-item" id="bag-magnet"><b>🧲 Magnet</b><span>Pull all loot to you</span><em id="bagMagnetN">x0</em></button>
+      <button class="offer bag-item" id="bag-heart"><b>❤️ Hati</b><span>Obat: pulihkan +30 HP</span><em id="bagHeartN">x0</em></button>
+      <button class="offer bag-item" id="bag-bomb"><b>💣 Bom</b><span>Ledakan 90 dmg, musuh dekat (280px)</span><em id="bagBombN">x0</em></button>
+      <button class="offer bag-item" id="bag-magnet"><b>🧲 Magnet</b><span>Tarik SEMUA item ke kamu</span><em id="bagMagnetN">x0</em></button>
     </div>
     <p style="font-size:13px">Tap an item to use it. The game pauses while the bag is open.</p>
     <button id="bagCloseBtn">✕ Close (B)</button>

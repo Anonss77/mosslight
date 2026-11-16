@@ -17,10 +17,11 @@ export class Input {
       if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) e.preventDefault();
       window.__keys.add(e.code);
       if (e.repeat) return;
-      if (e.code === 'KeyJ' || e.code === 'KeyQ') window.__castQueue.push('crescent');
-      else if (e.code === 'KeyK' || e.code === 'KeyE') window.__castQueue.push('ember');
-      else if (e.code === 'KeyL' || e.code === 'KeyR') window.__castQueue.push('glassguard');
-      else if (e.code === 'Space' || e.code === 'KeyF') window.__castQueue.push('starfall');
+      if (e.code === 'KeyJ' || e.code === 'Space') window.__castQueue.push('attack');
+      else if (e.code === 'KeyQ') window.__castQueue.push('crescent');
+      else if (e.code === 'KeyE') window.__castQueue.push('ember');
+      else if (e.code === 'KeyR') window.__castQueue.push('glassguard');
+      else if (e.code === 'KeyF') window.__castQueue.push('starfall');
       else if (e.code === 'KeyC') window.__castQueue.push('frost');
       else if (e.code === 'KeyB' && this.onBag) this.onBag();
       else if (e.code === 'Escape' && this.onPause) this.onPause();
@@ -71,5 +72,27 @@ export class Input {
       e.preventDefault();
       window.__castQueue.push(skillId);
     });
+  }
+
+  bindCamera(el) {
+    if (!window.__cam) window.__cam = { az: 0, tilt: 38 };
+    const cam = window.__cam;
+    let drag = null, lastTap = 0;
+    el.addEventListener('pointerdown', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 500) { cam.az = 0; cam.tilt = 38; lastTap = 0; return; }
+      lastTap = now;
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      try { el.setPointerCapture(e.pointerId); } catch {  }
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      cam.az += (e.clientX - drag.x) * 0.005;
+      cam.tilt = Math.max(25, Math.min(70, cam.tilt - (e.clientY - drag.y) * 0.12));
+      drag.x = e.clientX; drag.y = e.clientY;
+    });
+    const end = (e) => { if (drag && e.pointerId === drag.id) drag = null; };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
   }
 }

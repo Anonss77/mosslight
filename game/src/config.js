@@ -50,7 +50,7 @@ export const AREA_NAMES = ['Bloomroot Warrens', 'Cinderglass Works', 'Moonmilk V
 
 export const PLAYER = {
   maxHp: 100,
-  speed: 150,
+  speed: 180,
   radius: 10,
   moveRadius: 7,
   energyMax: 100,
@@ -60,6 +60,7 @@ export const PLAYER = {
   boltInterval: 0.55,
   boltRange: 190,
   boltSpeed: 320,
+  attackCd: 0.35,
 };
 
 export const SKILLS = {
@@ -73,30 +74,30 @@ export const SKILLS = {
 
 export const ENEMIES = {
   puffcap: {
-    name: 'Puffcap', hp: 24, speed: 60, radius: 10, moveRadius: 7,
-    attackRange: 30, pauseTime: 0.35, hopDist: 46, hopTime: 0.25, damage: 8, attackCd: 1.4,
+    name: 'Puffcap', hp: 84, speed: 72, radius: 10, moveRadius: 7,
+    attackRange: 30, pauseTime: 0.35, hopDist: 46, hopTime: 0.25, damage: 10, attackCd: 1.4,
     coinDrop: 1, heartChance: 0.25, shardChance: 0, magnetChance: 0, bombChance: 0,
   },
   tinket: {
-    name: 'Tinket', hp: 18, speed: 46, radius: 9, moveRadius: 7,
-    stopRange: 145, aimTime: 0.55, boltSpeed: 180, damage: 7, attackCd: 2.2,
+    name: 'Tinket', hp: 68, speed: 55, radius: 9, moveRadius: 7,
+    stopRange: 145, aimTime: 0.55, boltSpeed: 180, damage: 9, attackCd: 2.2,
     coinDrop: 1, heartChance: 0.2, shardChance: 0, magnetChance: 0, bombChance: 0,
   },
   brambler: {
-    name: 'Brambler', hp: 55, speed: 35, radius: 12, moveRadius: 7,
-    attackRange: 48, rootTime: 0.45, ringRadius: 70, damage: 16, attackCd: 2.6,
+    name: 'Brambler', hp: 190, speed: 42, radius: 12, moveRadius: 7,
+    attackRange: 48, rootTime: 0.45, ringRadius: 70, damage: 20, attackCd: 2.6,
     coinDrop: 2, heartChance: 0.22, shardChance: 0.25, magnetChance: 0, bombChance: 0.1,
   },
 
   wisp: {
-    name: 'Wisp', hp: 12, speed: 97, radius: 7, moveRadius: 6,
-    attackRange: 26, pauseTime: 0.3, hopDist: 60, hopTime: 0.22, damage: 5, attackCd: 1.1,
+    name: 'Wisp', hp: 44, speed: 118, radius: 7, moveRadius: 6,
+    attackRange: 26, pauseTime: 0.3, hopDist: 60, hopTime: 0.22, damage: 6, attackCd: 1.1,
     coinDrop: 1, heartChance: 0.15, shardChance: 0, magnetChance: 0.15, bombChance: 0,
   },
 
   bulwark: {
-    name: 'Bulwark', hp: 90, speed: 26, radius: 14, moveRadius: 8,
-    attackRange: 52, rootTime: 0.5, ringRadius: 78, damage: 20, attackCd: 3.0,
+    name: 'Bulwark', hp: 300, speed: 32, radius: 14, moveRadius: 8,
+    attackRange: 52, rootTime: 0.5, ringRadius: 78, damage: 25, attackCd: 3.0,
     coinDrop: 3, heartChance: 0.25, shardChance: 0.3, magnetChance: 0, bombChance: 0.25, starchipChance: 0.1,
   },
 };
@@ -112,26 +113,26 @@ export const BULWARK_FROM_WAVE = 4;
 
 export const BOSS = {
   name: 'The Gloam Bell',
-  hp: 950,
-  speed: 42,
+  hp: 1300,
+  speed: 48,
   radius: 16,
   moveRadius: 14,
-  contactDamage: 12,
+  contactDamage: 15,
   ringRadius: 140,
   ringTelegraph: 0.9,
   ringActive: 0.25,
-  ringDamage: 18,
+  ringDamage: 22,
   fanTelegraph: 0.6,
   fanShards: 5,
   fanSpreadDeg: 12,
   fanSpeed: 210,
-  fanDamage: 9,
+  fanDamage: 11,
   fanLife: 1.5,
   echoMarkers: 3,
   echoRadius: 44,
   echoOffsets: 48,
   echoDelay: 0.8,
-  echoDamage: 14,
+  echoDamage: 17,
   recovery: 0.75,
   roarTime: 0.8,
   phase2At: 0.6,
@@ -151,7 +152,6 @@ export const LOOT = {
   magnetSpeed: 180,
   collectCoin: 36,
   collectHeart: 28,
-  heartHeal: 20,
   coinScore: 2,
   shardScore: 25,
   killScore: 100,
@@ -165,12 +165,18 @@ export const LOOT = {
 };
 
 
-export const UPGRADES = [
-  { id: 'wick', name: 'Bright Wick', cost: 12, cur: 'coin', max: 2, desc: 'Bolt +3 damage' },
+export const UPGRADES = [  { id: 'wick', name: 'Bright Wick', cost: 12, cur: 'coin', max: 2, desc: 'Bolt +3 damage' },
   { id: 'hands', name: 'Quick Hands', cost: 10, cur: 'coin', max: 2, desc: 'Bolt interval -0.08s' },
   { id: 'thread', name: 'Long Thread', cost: 10, cur: 'coin', max: 2, desc: 'Bolt range +35px' },
   { id: 'cape', name: 'Padded Cape', cost: 14, cur: 'coin', max: 2, desc: '+20 max HP, heal 20' },
   { id: 'charm', name: 'Shard Charm', cost: 2, cur: 'shard', max: 1, desc: 'Crescent +10, Ember tick +3, Starfall +15' },
+];
+
+export const SHOP = [
+  { id: 'shopHeart', name: '❤️ Hati', desc: 'Pulihkan +30 HP', cost: 60 },
+  { id: 'shopEnergy', name: '⚡ Energi', desc: 'Isi +50 energi skill', cost: 45 },
+  { id: 'shopBomb', name: '💣 Bom', desc: '+1 bom ke tas', cost: 35 },
+  { id: 'shopMagnet', name: '🧲 Magnet', desc: '+1 magnet ke tas', cost: 30 },
 ];
 
 
@@ -218,6 +224,8 @@ export const AREAS = [
 export const CAM = {
   fov: 50,
   tiltDeg: 38,
+  tiltMin: 25,
+  tiltMax: 70,
 
   dist: 16,
   targetHeight: 1.4,

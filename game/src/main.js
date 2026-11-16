@@ -122,9 +122,12 @@ input.onPause = () => {
 };
 input.onBag = () => { if (game.state === 'playing' || bagOpen) setBag(!bagOpen); };
 input.bindJoystick($('joystick'), $('joyThumb'));
+input.bindCamera($('game'));
+$('camBtn').addEventListener('click', () => { if (window.__cam) { window.__cam.az = 0; window.__cam.tilt = 38; } });
 for (const id of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
   input.bindSkillButton($('skill-' + id), id);
 }
+input.bindSkillButton($('attackBtn'), 'attack');
 
 if (autotest) {
 

@@ -786,17 +786,21 @@ export function createWorld(canvas) {
 
     if (sim.state === 'title') tx -= CAM.titleShiftX;
     tx = Math.max(sim.state === 'title' ? FW / 2 - 24 : 14, Math.min(FW - 14, tx));
-    const tilt = (CAM.tiltDeg * Math.PI) / 180;
+    const cam = (typeof window !== 'undefined' && window.__cam) || { az: 0, tilt: CAM.tiltDeg };
+    const tilt = ((cam.tilt ?? CAM.tiltDeg) * Math.PI) / 180;
     const dy = Math.sin(tilt) * CAM.dist;
     const dz = Math.cos(tilt) * CAM.dist;
+    const az = cam.az || 0;
+    const ox = Math.sin(az) * dz, oz = Math.cos(az) * dz;
+    const fx = -Math.sin(az) * CAM.maxPitch, fz = -Math.cos(az) * CAM.maxPitch;
     let shX = 0, shZ = 0;
     if (sim.shakeT > 0) {
       const k = sim.shakeT / sim.shakeMax;
       shX = Math.sin(sim.time * 90) * sim.shakeAmp * k * PX;
       shZ = Math.cos(sim.time * 77) * sim.shakeAmp * k * PX;
     }
-    camera.position.set(tx + shX, CAM.targetHeight + dy, tz + dz + shZ);
-    camera.lookAt(tx + shX, CAM.targetHeight, tz - CAM.maxPitch + shZ);
+    camera.position.set(tx + ox + shX, CAM.targetHeight + dy, tz + oz + shZ);
+    camera.lookAt(tx + fx + shX, CAM.targetHeight, tz + fz + shZ);
   }
 
   function render() {

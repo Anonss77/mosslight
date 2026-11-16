@@ -45,6 +45,7 @@ export function createPlayer(x, y) {
     speed: PLAYER.speed,
     radius: PLAYER.radius, moveRadius: PLAYER.moveRadius,
     boltTimer: 0,
+    manualCd: 0,
     boltDamage: PLAYER.boltDamage, boltInterval: PLAYER.boltInterval, boltRange: PLAYER.boltRange,
     cooldowns: { crescent: 0, ember: 0, glassguard: 0, starfall: 0, frost: 0 },
     shield: 0, shieldT: 0,
