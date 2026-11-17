@@ -418,10 +418,17 @@ const glow = new THREE.Mesh(
 new THREE.SphereGeometry(0.34, 10, 8),
 new THREE.MeshBasicMaterial({ color: 0xffb830, transparent: true, opacity: 0.35, depthWrite: false }),
 );
-g.add(core, glow);
+const head = new THREE.Mesh(
+new THREE.ConeGeometry(0.22, 0.7, 6),
+core.material,
+);
+head.rotation.z = -Math.PI / 2;
+head.position.x = 0.16;
+head.scale.set(1.9, 0.1, 1.9);
+g.add(core, glow, head);
 g.visible = false;
 scene.add(g);
-p = { group: g, core, glow, inUse: false };
+p = { group: g, core, glow, head, inUse: false };
 projPool.push(p);
 }
 return p;
@@ -794,6 +801,7 @@ if (hero) {
 const pg = hero.group;
 pg.visible = true;
 pg.position.set(toX(p.x), 0, toZ(p.y));
+if (p.castT > 0) { pg.position.x += Math.cos(p.faceAngle || 0) * p.castT * 2; pg.position.z += Math.sin(p.faceAngle || 0) * p.castT * 2; }
 pg.rotation.y = Math.PI / 2 - (p.faceAngle || 0) + hero.yawOffset;
 const a = hero.actions;
 const mvx = p.x - (hero.px ?? p.x), mvy = p.y - (hero.py ?? p.y);
@@ -807,6 +815,8 @@ sim.particles.push({ x: p.x, y: p.y + 10, z: 0.25, vx: 0, vy: 0, vz: 18, life: 0
 }
 if (p.hurtT > 0 && hero.prevHurt <= 0 && a.hurt) hero.oneshot = a.hurt;
 hero.prevHurt = p.hurtT;
+if (p.castT > 0 && (hero.prevCast || 0) <= 0 && a.cast) hero.oneshot = a.cast;
+hero.prevCast = p.castT;
 for (const k of ['s1', 's2', 'ult']) {
 const cd = p.cooldowns[k] || 0;
 if (hero.prevCd[k] <= 0.05 && cd > 1) {
@@ -967,16 +977,15 @@ const col = pr.kind === 'tinket' ? 0x35c9d0 : pr.kind === 'shard' ? 0x7fe8ff : p
 slot.core.material.color.set(col);
 slot.glow.material.color.set(col);
 const s = pr.kind === 'shard' ? 1.25 : 1;
-slot.group.scale.set((v === 'arrow' ? 5 : v === 'wave' ? 0.6 : 1) * s, (v === 'wave' ? 3.5 : v === 'arrow' ? 0.6 : 1) * s, v === 'bolt' ? s : 0.6);
+slot.group.scale.set((v === 'arrow' ? 5 : v === 'wave' ? 0.7 : 1) * s, (v === 'wave' ? 4.2 : v === 'arrow' ? 0.6 : 1) * s, v === 'bolt' ? s : 0.6);
 slot.group.rotation.y = -Math.atan2(pr.vy, pr.vx);
 const ang = -Math.atan2(pr.vy, pr.vx);
-if (pr.kind === 'bolt' || pr.kind === 'frostbolt') {
+slot.head.visible = v === 'arrow';
+if (pr.kind === 'bolt' && v === 'bolt') {
 slot.group.visible = false;
-showFx('fireball', Math.floor(sim.time * 12 + pr.x) % 8, toX(pr.x), 0.9, toZ(pr.y), 1.5, pr.kind === 'frostbolt' ? 0xbfefff : 0xffffff, ang);
-} else if (v === 'arrow') {
-spawnShot('dot', toX(pr.x - pr.vx * 0.02), 0.9, toZ(pr.y - pr.vy * 0.02), 0.5, 0xffffff, 0, 0.25);
-} else if (v === 'wave') {
-spawnShot('dot', toX(pr.x - pr.vx * 0.02), 0.9, toZ(pr.y - pr.vy * 0.02), 0.6, 0xffd76a, 0, 0.25);
+showFx('fireball', Math.floor(sim.time * 12 + pr.x) % 8, toX(pr.x), 0.9, toZ(pr.y), 1.5, 0xffffff, ang);
+} else if (v === 'arrow' || v === 'wave') {
+spawnShot('dot', toX(pr.x - pr.vx * 0.02), 0.9, toZ(pr.y - pr.vy * 0.02), v === 'arrow' ? 0.5 : 0.6, v === 'arrow' ? 0xffffff : 0xffd76a, 0, 0.25);
 }
 }
 for (const pr of projPool) if (!pr.inUse) pr.group.visible = false;
@@ -1047,7 +1056,7 @@ if (sim.slash && sim.slash.life > 0) {
 const s = sim.slash;
 const k = 1 - s.life / s.maxLife;
 const ult = (s.m || 1) > 2;
-showFx('slash', Math.min(3, Math.floor(k * 4)), toX(s.x), 0.7, toZ(s.y), (ult ? 5 : 3) * (s.m || 1) * (1 + k * 0.6), ult ? 0xff8a2a : 0xffd76a, -s.angle);
+showFx('slash', Math.min(3, Math.floor(k * 4)), toX(s.x), 0.7, toZ(s.y), 5 * (s.m || 1) * (1 + k * 0.6), ult ? 0xff8a2a : 0xffd76a, -s.angle);
 if (ult) {
 showFx('tornado', Math.floor(sim.time * 10) % 8, toX(s.x), 1.6, toZ(s.y), 5.5, 0xffffff, 0);
 showFx('smoke', 0, toX(s.x), 0.8, toZ(s.y), 4.5, 0xff8a2a, 0);

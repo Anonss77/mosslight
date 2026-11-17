@@ -11,6 +11,8 @@ function fitStage() {
 }
 window.addEventListener('resize', fitStage);
 window.addEventListener('orientationchange', fitStage);
+addEventListener('contextmenu', e => e.preventDefault());
+document.querySelectorAll('img').forEach(i => i.draggable = false);
 
 const params = new URLSearchParams(location.search);
 const langParam = params.get('lang');

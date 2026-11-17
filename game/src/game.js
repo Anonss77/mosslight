@@ -9,7 +9,7 @@ COS05, SIN05, COS06, SIN06, FAN_OFF,
 } from './config.js';
 import { t } from './i18n.js';
 import { makeRng } from './random.js';
-export function ic(n){return '<img class=ic src=i/'+n+'.png>'}
+export function ic(n){return '<img draggable=false class=ic src=i/'+n+'.png>'}
 import {
 generateField, moveField, spawnPoint,
 } from './field.js';
@@ -497,7 +497,7 @@ this.fxEvents.push({ k: 'charge', x0, y0, x1: p.x, y1: p.y });
 const dmg = s.dmg + bonus;
 const col = s.fx === 'charge' ? '#7fd4ff' : '#ffd76a';
 const a = p.faceAngle;
-if (s.fx === 'arc') this.slash = { x: p.x, y: p.y, angle: a, life: 0.3, maxLife: 0.3, m: s.range / 70 };
+if (s.fx === 'arc') this.slash = { x: p.x, y: p.y, angle: a, life: 0.5, maxLife: 0.5, m: s.range / 70 };
 burstParticles(this.particles, this.vrng, p.x, p.y, col, s.range > 100 ? 36 : 20, 180);
 let hits = 0;
 for (const e of [...this.enemies]) {
