@@ -34,6 +34,11 @@ if (!autotest) fitStage();
 const game = new Game(world, audio, { seed, hero: HEROES[heroParam] ? heroParam : 'neri', autotest: autotest || !!shot, shot: shot || null, speed });
 window.__mosslight = { game, shotReady: false, done: null };
 
+if (!autotest) {
+ Object.keys(HEROES).forEach(h=>world.loadHero(h,1));
+ setInterval(() => $('startBtn').textContent = world.isHeroLoaded(game.heroId) ? t('start') : 'Loading…', 400);
+}
+
 const $ = (id) => document.getElementById(id);
 const titlePanel = $('titlePanel');
 const hud = $('hud');
@@ -77,7 +82,7 @@ function applyLang() {
   document.documentElement.lang = lang === 'id' ? 'id' : 'en';
   document.documentElement.style.setProperty('--baglbl', "'" + t('bagB') + "'");
   $('langIdBtn').classList.toggle('sel', lang === 'id');
-  $('langEnBtn').classList.toggle('sel', lang === 'en');
+  $('langEnBtn').classList.toggle('sel', lang === 'en');syncBest();
 }
 function setLang(l) {
   setLangStored(l);
@@ -106,12 +111,11 @@ function selectHero(id) {
 for (const el of document.querySelectorAll('.hero-card')) {
   el.addEventListener('click', () => selectHero(el.dataset.hero));
 }
-try {
-  const b = +localStorage.getItem('mosslight-best') || 0;
-  $('bestTally').textContent = t('best') + b;
-} catch (e) {}
+function syncBest(){try{$('bestTally').textContent=t('best')+(+localStorage.getItem('mosslight-best')||0)}catch(e){}}
+syncBest();
 
 $('startBtn').addEventListener('click', () => {
+  if (!world.isHeroLoaded(game.heroId)) return;
   startRunWithSeed(game.seed);
   audio.unlock();
   if(matchMedia('(pointer:coarse)').matches){try{document.documentElement.requestFullscreen().catch(()=>{}),screen.orientation.lock('landscape').catch(()=>{})}catch(e){}}

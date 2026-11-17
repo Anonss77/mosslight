@@ -48,16 +48,16 @@
   #bossTrack { height: 18px; background: rgba(0,0,0,0.55); border: 3px solid #FFD76A; border-radius: 6px; overflow: hidden; }
   #bossFill { height: 100%; background: linear-gradient(#FFD76A, #E94F62); width: 100%; transition: width 0.15s linear; }
 
-  #joystick { position: absolute; left: 40px; bottom: 120px; width: 112px; height: 112px; border-radius: 50%;
+  #joystick { position: absolute; left: 15%; top: 73.5%; transform: translate(-50%,-50%); width: 150px; height: 150px; border-radius: 50%;
     background: transparent;
     border: 4px solid rgba(255,255,255,0.65); box-shadow: 0 6px 16px rgba(0,0,0,0.6), inset 0 2px 8px rgba(255,255,255,0.15);
     pointer-events: auto; touch-action: none; }
-  #joyThumb { position: absolute; left: 32px; top: 32px; width: 48px; height: 48px; border-radius: 50%;
+  #joyThumb { position: absolute; left: 43px; top: 43px; width: 64px; height: 64px; border-radius: 50%;
     background: radial-gradient(circle at 35% 28%, #FFF3C4 0%, #F5D45A 25%, #C9A227 60%, #8A5A1E 100%);
     border: 2px solid rgba(255,255,255,0.8); box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
-  .skill { position: absolute; border-radius: 50%; pointer-events: auto; cursor: pointer; overflow: hidden; box-sizing: border-box;
-    background: transparent;
+  .skill { position: absolute; border-radius: 50%; pointer-events: auto; cursor: pointer; overflow: hidden; box-sizing: border-box; transform: translate(-50%,-50%);
+    background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #D8A93C 60%, #8A5A1E 100%);
     border: 3px solid #C9A227; box-shadow: 0 0 0 2px #5A3A1A, 0 4px 12px rgba(0,0,0,0.55); touch-action: none; }
   .skill .cd { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--cd, 0) * 100%); background: rgba(0,0,0,0.6); }
   .skill .cost { position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%); min-width: 20px; height: 16px; line-height: 16px; text-align: center;
@@ -68,11 +68,11 @@
   .skill.ready { animation: glow 0.8s infinite alternate; border-color: #FFD76A; }
 
   @keyframes glow { from { box-shadow: 0 0 6px #FFD76A; } to { box-shadow: 0 0 22px #FFD76A; } }
-  #skill-0 { right: 118px; bottom: 206px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #D8A93C 60%, #8A5A1E 100%); }
-  #skill-1 { right: 150px; bottom: 130px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #D8A93C 60%, #8A5A1E 100%); }
-  #skill-2 { right: 38px; bottom: 234px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FFF3C4 0%, #F5D45A 45%, #B8860B 100%); }
+  #skill-0 { left: calc(84.7% - 29px); top: calc(73.3% - 29px); width: 88px; height: 88px; }
+  #skill-1 { left: calc(84.7% - 65px); top: calc(73.3% + 57px); width: 88px; height: 88px; }
+  #skill-2 { left: calc(84.7% + 57px); top: calc(73.3% - 65px); width: 88px; height: 88px; background: radial-gradient(circle at 35% 30%, #FFF3C4 0%, #F5D45A 45%, #B8860B 100%); }
   .skill img { position: absolute; inset: 9px; width: calc(100% - 18px); height: calc(100% - 18px); }
-  #attackBtn { right: 32px; bottom: 120px; width: 76px; height: 76px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #E8A81A 55%, #B8860B 100%); border-width: 4px; }
+  #attackBtn { left: calc(84.7% + 57px); top: calc(73.3% + 57px); width: 104px; height: 104px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #E8A81A 55%, #B8860B 100%); border-width: 4px; }
   #attackBtn .lbl { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 10px; font-weight: bold; color: #4A2E00; text-shadow: none; }
   #muteBtn, #bagBtn, #camBtn { position: absolute; width: 56px; height: 56px; border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #FFF3C4, #E8C33C 60%, #B8860B); border: 3px solid #C9A227; cursor: pointer; pointer-events: auto; box-shadow: 0 0 0 2px #5A3A1A, 0 4px 12px rgba(0,0,0,0.55); }
@@ -113,10 +113,10 @@
   .menuRow{display:flex;gap:8px}
   .orn img{width:26px;height:26px;margin:0 5px;filter:drop-shadow(0 2px 2px #0006)}
   .best{padding:6px 16px;font-size:15px}
-  #titlePanel{width:min(696px,92vw)}
-  #titlePanel .hero-card{width:150px}
-  #titlePanel .hero-card img{width:92px;height:92px}
-  #titlePanel h1{font-size:clamp(44px,9vmin,92px)}
+  #titlePanel{width:min(856px,92vw)}
+  #titlePanel .hero-card{width:172px}
+  #titlePanel .hero-card img{width:106px;height:106px}
+  #titlePanel h1{font-size:clamp(51px,10.4vmin,106px)}
   .lang.sel{outline:4px solid #FFD76A}
   #offerRow,#shopRow{display:flex;gap:10px;justify-content:center;margin:6px 0;flex-wrap:wrap}
   .offer{display:block;width:128px;padding:6px;box-sizing:border-box;border:12px solid transparent;border-image:url(i/panel.png) 20 fill;background:#F6E8C8;border-radius:0}
@@ -128,7 +128,6 @@
   .offer.shop{width:118px;padding:8px 6px}
   .offer.off{opacity:.45;filter:grayscale(.6)}
   .offer.bag-item{width:128px;min-height:110px}
-  .bag-item.empty{opacity:.45}
   .stats{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0 8px}
   .stats .plank{padding:8px 11px;min-width:76px}
   .stats span{display:block;font-size:11px;color:#6B4423;text-transform:uppercase;margin-bottom:2px}
@@ -138,10 +137,9 @@
   @media (max-width:700px){
     .panel{padding:2px 6px 10px}
     .panel h1{letter-spacing:3px}
-    .panel p{font-size:14px}
     .offer{width:118px;padding:8px 6px}
     .offer.shop{width:104px}
-    #joystick{left:24px;bottom:100px;width:96px;height:96px}
+    #joystick{left:72px;bottom:148px;width:96px;height:96px}
     #joyThumb{left:28px;top:28px;width:40px;height:40px}
     .skill{width:48px!important;height:48px!important}
     #buildText{display:none}

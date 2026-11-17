@@ -35,21 +35,17 @@ export const WAVES = [
   { area: 2, groups: 4, perGroup: 5, hpMul: 1.8, spMul: 1.15, boss: true },
 ];
 export const PLAYER = {
-  maxHp: 100,
-  speed: 180,
   radius: 10,
   moveRadius: 7,
   energyMax: 100,
   energyRegen: 8,
   iframes: 0.65,
-  boltDamage: 5,
   boltInterval: 0.55,
-  boltRange: 190,
   boltSpeed: 320,
 };
 
 export const HEROES = {
-  neri: { name: 'Neri', file: 'neri.glb', prefix: 'Mage_',
+  neri: { name: 'Neri', file: 'neri.glb', proj: 'bolt', prefix: 'Mage_',
     hide: ['2H_Staff', '1H_Wand', 'Spellbook', 'Spellbook_open'],
     cast: 'Spellcast_Shoot', castLong: 'Spellcast_Raise',
     hp: 100, speed: 180, boltDmg: 5, boltRange: 190,
@@ -58,7 +54,7 @@ export const HEROES = {
       { name: 'skEmber', fx: 'patch', ic: 'flame', cost: 30, cd: 7, range: 160, r: 72, dmg: 12, tick: 8, tickTime: 2 },
       { name: 'skStar', fx: 'rain', ic: 'star', cost: 100, cd: 30, windup: 0.6, range: 135, dmg: 90, kb: 90, n: 16, col: '#ffd76a' },
     ] },
-  aldric: { name: 'Aldric', file: 'aldric.glb', prefix: 'Knight_',
+  aldric: { name: 'Aldric', file: 'aldric.glb', proj: 'wave', prefix: 'Knight_',
     hide: ['1H_Sword_Offhand', '2H_Sword', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield'],
     cast: '1H_Melee_Attack_Slice_Horizontal', castLong: '2H_Melee_Attack_Spin',
     hp: 130, speed: 165, boltDmg: 6, boltRange: 150,
@@ -67,7 +63,7 @@ export const HEROES = {
       { name: 'skChg', fx: 'charge', ic: 'shield', cost: 30, cd: 7, range: 70, dmg: 22, lunge: 90, kb: 40 },
       { name: 'skWhirl', fx: 'arc', ic: 'whirl', cost: 100, cd: 30, range: 150, dmg: 70, kb: 120 },
     ] },
-  lyra: { name: 'Lyra', file: 'lyra.glb', prefix: 'Rogue_',
+  lyra: { name: 'Lyra', file: 'lyra.glb', proj: 'arrow', prefix: 'Rogue_',
     hide: ['1H_Crossbow', 'Knife', 'Knife_Offhand', 'Throwable'],
     cast: '2H_Ranged_Shoot',
     hp: 105, speed: 195, boltDmg: 6, boltRange: 230,
@@ -80,37 +76,34 @@ export const HEROES = {
 
 export const ENEMIES = {
   puffcap: {
-    name: 'Puffcap', hp: 84, speed: 72, radius: 10, moveRadius: 7,
+    hp: 84, speed: 72, radius: 10, moveRadius: 7,
     attackRange: 30, pauseTime: 0.35, hopDist: 46, hopTime: 0.25, damage: 10, attackCd: 1.4,
     coinDrop: 1, heartChance: 0.25, shardChance: 0, magnetChance: 0, bombChance: 0,
   },
   tinket: {
-    name: 'Tinket', hp: 68, speed: 55, radius: 9, moveRadius: 7,
+    hp: 68, speed: 55, radius: 9, moveRadius: 7,
     stopRange: 145, aimTime: 0.55, boltSpeed: 180, damage: 9, attackCd: 2.2,
     coinDrop: 1, heartChance: 0.2, shardChance: 0, magnetChance: 0, bombChance: 0,
   },
   brambler: {
-    name: 'Brambler', hp: 190, speed: 42, radius: 12, moveRadius: 7,
+    hp: 190, speed: 42, radius: 12, moveRadius: 7,
     attackRange: 48, rootTime: 0.45, ringRadius: 70, damage: 20, attackCd: 2.6,
     coinDrop: 2, heartChance: 0.22, shardChance: 0.25, magnetChance: 0, bombChance: 0.1,
   },
 
   wisp: {
-    name: 'Wisp', hp: 44, speed: 118, radius: 7, moveRadius: 6,
+    hp: 44, speed: 118, radius: 7, moveRadius: 6,
     attackRange: 26, pauseTime: 0.3, hopDist: 60, hopTime: 0.22, damage: 6, attackCd: 1.1,
     coinDrop: 1, heartChance: 0.15, shardChance: 0, magnetChance: 0.15, bombChance: 0,
   },
 
   bulwark: {
-    name: 'Bulwark', hp: 300, speed: 32, radius: 14, moveRadius: 8,
+    hp: 300, speed: 32, radius: 14, moveRadius: 8,
     attackRange: 52, rootTime: 0.5, ringRadius: 78, damage: 25, attackCd: 3.0,
     coinDrop: 3, heartChance: 0.25, shardChance: 0.3, magnetChance: 0, bombChance: 0.25, starchipChance: 0.1,
   },
 };
 
-export const TINKET_MAX_PER_GROUP = 2;
-export const BRAMBLER_MAX_PER_GROUP_EARLY = 1;
-export const BRAMBLER_MAX_PER_GROUP_LATE = 2;
 
 export const BOSS = {
   name: 'The Gloam Bell',
@@ -125,11 +118,9 @@ export const BOSS = {
   ringDamage: 22,
   fanTelegraph: 0.6,
   fanShards: 5,
-  fanSpreadDeg: 12,
   fanSpeed: 210,
   fanDamage: 11,
   fanLife: 1.5,
-  echoMarkers: 3,
   echoRadius: 44,
   echoOffsets: 48,
   echoDelay: 0.8,
@@ -198,35 +189,32 @@ export const FEEL = {
 export const AREAS = [
   {
     name: 'Bloomroot Warrens',
-    outline: '#3A7A5E', wall: '#35705F', wallTop: '#4FA88A', floor: '#71CC6F',
-    floorAlt: '#7ED47E', moss: '#A5E37A', water: '#45C8B2', flower: '#FF7099',
-    loot: '#F5D45A', highlight: '#FFF3C4', sky: '#2F7D5C', mapWall: '#57B795',
+    wall: '#35705F', floor: '#71CC6F',
+    floorAlt: '#7ED47E', water: '#45C8B2', flower: '#FF7099',
+    highlight: '#FFF3C4', sky: '#2F7D5C',
   },
   {
     name: 'Cinderglass Works',
-    outline: '#5C3A44', wall: '#5C3644', wallTop: '#7A4A58', floor: '#F07F4A',
-    floorAlt: '#F58F5C', forge: '#F59B42', machinery: '#35C9D0', hazard: '#E94F62',
-    loot: '#FFE073', highlight: '#FFF2D0', sky: '#7A4A30', mapWall: '#C08A96',
+    wall: '#5C3644', floor: '#F07F4A',
+    floorAlt: '#F58F5C', forge: '#F59B42', machinery: '#35C9D0',
+    highlight: '#FFF2D0', sky: '#7A4A30',
   },
   {
     name: 'Moonmilk Vault',
-    outline: '#4A3A66', wall: '#6058AC', wallTop: '#7A72C4', floor: '#A58CD0',
-    floorAlt: '#B39DDB', crystal: '#C9BBF5', glow: '#76DDE0', fungus: '#A7E760',
-    loot: '#FFD76A', highlight: '#F6F0FF', sky: '#4A4A9A', mapWall: '#A89FE8',
+    wall: '#6058AC', floor: '#A58CD0',
+    floorAlt: '#B39DDB', crystal: '#C9BBF5', fungus: '#A7E760',
+    highlight: '#F6F0FF', sky: '#4A4A9A',
   },
 ];
 
 export const CAM = {
   fov: 50,
   tiltDeg: 38,
-  tiltMin: 25,
-  tiltMax: 70,
 
   dist: 16,
   targetHeight: 1.4,
   neriHeight: 3.4,
 
-  bossHeight: 4.6,
   maxPitch: 0.35,
   titleShiftX: 9,
 };

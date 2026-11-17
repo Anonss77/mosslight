@@ -8,7 +8,6 @@ import {
  buildWisp, buildBulwark, buildMagnet, buildBomb, buildStarchip,
  buildCoin, buildHeart, buildShard, buildChest, buildStatue, buildProp, buildTorch,
  buildSlash, buildEmberPatch, buildStreak, buildTelegraphRing, buildAimLine,
- blobShadow, lam,
 } from './models.js';
 import { GLTFLoader } from '../vendor/loaders/GLTFLoader.js';
 
@@ -266,10 +265,10 @@ export function createWorld(canvas) {
  let emberMeshes = new Map();
  const streakPool = [];
 
- async function loadHero(id) {
+ async function loadHero(id, keep) {
   const H = HEROES[id] || HEROES.neri;
   id = HEROES[id] ? id : 'neri';
-  if (heroCache[id]) { setHero(heroCache[id]); return heroCache[id]; }
+  if (heroCache[id]) { if (!keep) setHero(heroCache[id]); return heroCache[id]; }
   if (heroLoading[id]) return heroLoading[id];
   heroLoading[id] = (async () => {
    try {
@@ -341,7 +340,7 @@ export function createWorld(canvas) {
     };
     mixer.addEventListener('finished', (e) => { if (built.oneshot === e.action) built.oneshot = null; });
     heroCache[id] = built;
-    setHero(built);
+    if (!keep) setHero(built);
     return built;
    } catch (err) {
     console.error('[mosslight] hero glb failed to load', id, err);
@@ -665,11 +664,13 @@ export function createWorld(canvas) {
    slot.inUse = true;
    slot.group.visible = true;
    slot.group.position.set(toX(pr.x), 0.9, toZ(pr.y));
-   const col = pr.kind === 'tinket' ? 0x35c9d0 : pr.kind === 'shard' ? 0x7fe8ff : 0xffc94d;
+   const v = { bolt: HEROES[hid].proj, frostbolt: 'arrow' }[pr.kind] || 'bolt';
+   const col = pr.kind === 'tinket' ? 0x35c9d0 : pr.kind === 'shard' ? 0x7fe8ff : pr.kind === 'frostbolt' ? 0xbfefff : v === 'arrow' ? 0x9fe89f : v === 'wave' ? 0xffd76a : 0xffc94d;
    slot.core.material.color.set(col);
    slot.glow.material.color.set(col);
    const s = pr.kind === 'shard' ? 1.25 : 1;
-   slot.group.scale.setScalar(s);
+   slot.group.scale.set((v === 'arrow' ? 5 : v === 'wave' ? 0.6 : 1) * s, (v === 'wave' ? 3.5 : v === 'arrow' ? 0.6 : 1) * s, v === 'bolt' ? s : 0.6);
+   slot.group.rotation.y = -Math.atan2(pr.vy, pr.vx);
   }
   for (const pr of projPool) if (!pr.inUse) pr.group.visible = false;
 
@@ -743,7 +744,7 @@ export function createWorld(canvas) {
    slashMesh.group.position.set(toX(s.x), 0.7, toZ(s.y));
    slashMesh.group.rotation.y = s.angle;
    const k = 1 - s.life / s.maxLife;
-   slashMesh.group.scale.setScalar(1.15 + k * 2.1);
+   slashMesh.group.scale.setScalar((1.15 + k * 2.1) * (s.m || 1));
    slashMesh.parts.arc.material.opacity = 0.95 * (s.life / s.maxLife);
    slashMesh.parts.glow.material.opacity = 0.45 * (s.life / s.maxLife);
   } else if (slashMesh) {
@@ -821,5 +822,5 @@ export function createWorld(canvas) {
   renderer.setPixelRatio(r);
  }
 
- return { setField, setArea, sync, render, resize, setPixelRatio, loadHero, isHeroLoaded: () => !!hero, scene, camera, renderer };
+ return { setField, setArea, sync, render, resize, setPixelRatio, loadHero, isHeroLoaded: (id) => (id ? !!heroCache[id] : !!hero), scene, camera, renderer };
 }

@@ -1,4 +1,4 @@
-// i18n: [Bahasa Indonesia, English]. Default id, saved in localStorage.
+// i18n: [id, en].
 const STR = {
  rotateT: ['Putar HP kamu untuk main', 'Rotate your device to play'],
  rotateS: ['Hanya landscape', 'Landscape only'],
@@ -87,8 +87,8 @@ const STR = {
  shBombD: ['+1 bom ke tas', '+1 bomb to bag'],
  shMagD: ['+1 magnet ke tas', '+1 magnet to bag'],
 };
-export let lang = 'id';
-try { lang = localStorage.getItem('mosslight-lang') === 'en' ? 'en' : 'id'; } catch (e) {}
+export let lang = 'en';
+try { lang = localStorage.getItem('mosslight-lang') === 'id' ? 'id' : 'en'; } catch (e) {}
 export function setLangStored(l) {
  lang = l === 'en' ? 'en' : 'id';
  try { localStorage.setItem('mosslight-lang', lang); } catch (e) {}

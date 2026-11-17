@@ -493,8 +493,8 @@ export class Game {
    const dmg = s.dmg + bonus;
    const col = s.fx === 'charge' ? '#7fd4ff' : '#ffd76a';
    const a = p.faceAngle;
-   this.slash = { x: p.x, y: p.y, angle: a, life: 0.3, maxLife: 0.3 };
-   burstParticles(this.particles, this.vrng, p.x, p.y, col, 20, 180);
+   if (s.fx === 'arc') this.slash = { x: p.x, y: p.y, angle: a, life: 0.3, maxLife: 0.3, m: s.range / 70 };
+   burstParticles(this.particles, this.vrng, p.x, p.y, col, s.range > 100 ? 36 : 20, 180);
    let hits = 0;
    for (const e of [...this.enemies]) {
     if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) {
