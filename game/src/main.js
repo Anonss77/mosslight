@@ -112,6 +112,7 @@ for (const el of document.querySelectorAll('.hero-card')) {
   el.addEventListener('click', () => selectHero(el.dataset.hero));
 }
 function syncBest(){try{$('bestTally').textContent=t('best')+(+localStorage.getItem('mosslight-best')||0)}catch(e){}}
+$('resetBtn').onclick=()=>{try{localStorage.removeItem('mosslight-best')}catch(e){}syncBest()};
 syncBest();
 
 $('startBtn').addEventListener('click', () => {

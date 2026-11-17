@@ -6,7 +6,7 @@ import {
 buildLantern, buildAuraRing, buildMoth,
 buildPuffcap, buildTinket, buildBrambler, buildBoss,
 buildWisp, buildBulwark, buildMagnet, buildBomb, buildStarchip,
-buildCoin, buildHeart, buildShard, buildChest, buildStatue, buildProp, buildTorch,
+buildCoin, buildHeart, buildShard, buildChest, buildStatue, buildProp,
 buildTelegraphRing, buildAimLine,
 } from './models.js';
 import { GLTFLoader } from '../vendor/loaders/GLTFLoader.js';
@@ -242,24 +242,62 @@ let titleDecor = null;
 function buildTitleDecor() {
 if (titleDecor) scene.remove(titleDecor);
 titleDecor = new THREE.Group();
-const put = (built, x, z, s, ry = 0) => {
-const g = built.group || built;
-g.position.set(x, 0, z);
-g.scale.setScalar(s);
-g.rotation.y = ry;
-titleDecor.add(g);
-return built;
-};
-put(buildStatue(), 52.5, 50, 1.8);
-put(buildProp(0, 'crystal'), 55, 55, 2.1);
-put(buildProp(0, 'mushroom'), 56, 58, 2.6);
-put(buildTorch(), 53, 46, 1);
-put(buildStatue(), 79.5, 50, 1.8, 0.6);
-put(buildProp(0, 'obelisk'), 77, 55, 1.7);
-put(buildProp(0, 'crystal'), 76, 58, 2.1);
-put(buildTorch(), 79, 46, 1);
+const M = c => new THREE.MeshLambertMaterial({ color: c });
+const SP = (r, a = 8, b = 6) => new THREE.SphereGeometry(r, a, b);
+const BX = (x, y, z) => new THREE.BoxGeometry(x, y, z);
+const CY = (a, b, h, s = 8) => new THREE.CylinderGeometry(a, b, h, s);
+const CN = (r, h, s = 8) => new THREE.ConeGeometry(r, h, s);
+const add = (g, m, x, y, z, p) => { const q = new THREE.Mesh(g, m); q.position.set(x, y, z); (p || titleDecor).add(q); return q; };
+const grp = (x, z, s = 1) => { const g = new THREE.Group(); g.position.set(x, 0, z); g.scale.setScalar(s); titleDecor.add(g); return g; };
+const put = (built, x, z, s, ry = 0) => { const g = built.group || built; g.position.set(x, 0, z); g.scale.setScalar(s); g.rotation.y = ry; titleDecor.add(g); return built; };
+const mg = grp(54, 53);
+add(CY(1.3, 1.5, 0.5, 8), M(0x9a9a9a), 0, 0.25, 0, mg);
+add(CN(0.32, 0.75, 8), M(0x4a2a6e), 0, 0.85, 0, mg);
+add(SP(0.22), M(0x2a1a3a), 0, 1.35, 0, mg);
+add(CN(0.34, 0.5, 8), M(0x6b3fa0), 0, 1.62, 0, mg);
+add(CY(0.36, 0.36, 0.06, 8), M(0x6b3fa0), 0, 1.42, 0, mg);
+add(CY(0.03, 0.03, 1.1, 6), M(0x6b4423), 0.3, 1.0, 0, mg);
+add(SP(0.11), new THREE.MeshBasicMaterial({ color: 0x7fd4ff }), 0.3, 1.6, 0, mg);
+const bu = grp(75, 61, 1.2);
+add(SP(0.45), M(0x3f7a2e), -0.3, 0.38, 0.25, bu);
+add(SP(0.35), M(0x4c8a38), 0.35, 0.3, 0.15, bu);
+add(SP(0.32), M(0xfff8f0), 0.1, 0.55, -0.25, bu);
+add(SP(0.2), M(0xfff8f0), 0.1, 0.95, -0.25, bu);
+add(CN(0.07, 0.42, 6), M(0xfff8f0), 0.02, 1.25, -0.25, bu);
+add(CN(0.07, 0.42, 6), M(0xfff8f0), 0.18, 1.25, -0.25, bu);
+const sl = grp(79.5, 53);
+const sb = add(SP(0.5), M(0xa8d94e), 0, 0.32, 0, sl); sb.scale.y = 0.65;
+add(SP(0.07), M(0x222222), -0.16, 0.5, 0.42, sl);
+add(SP(0.07), M(0x222222), 0.16, 0.5, 0.42, sl);
+add(CN(0.05, 0.22, 6), M(0x5a9a3a), 0, 0.72, 0, sl);
+const pd = grp(78, 44.5);
+add(CY(2, 2, 0.04, 20), M(0x5eb1ef), 0, 0.02, 0, pd);
+add(SP(0.3), M(0x9a9a9a), -1.2, 0.1, 0.8, pd);
+add(SP(0.22), M(0x9a9a9a), 1.3, 0.08, -0.6, pd);
+const shroom = (x, z, s) => { const g = grp(x, z, s);
+add(CY(0.09, 0.13, 0.3, 6), M(0xfff3c4), 0, 0.15, 0, g);
+const c = add(SP(0.3, 10, 8), M(0xe74c3c), 0, 0.3, 0, g); c.scale.y = 0.7;
+add(SP(0.05, 6, 5), M(0xffffff), -0.12, 0.44, 0.1, g);
+add(SP(0.05, 6, 5), M(0xffffff), 0.12, 0.47, -0.05, g); };
+shroom(52, 59, 1); shroom(56.5, 60.5, 0.8); shroom(80.5, 59, 1); shroom(82, 47, 0.9);
+const daisy = (x, z) => { const g = grp(x, z, 1);
+add(CY(0.03, 0.03, 0.35, 5), M(0x4c8a38), 0, 0.17, 0, g);
+const h = add(SP(0.16), M(0xffffff), 0, 0.4, 0, g); h.scale.y = 0.5;
+add(SP(0.07), M(0xffd94d), 0, 0.48, 0, g); };
+daisy(58, 61); daisy(74, 61.5); daisy(51, 46);
+const fence = (x, z, ry) => { const g = grp(x, z, 1); g.rotation.y = ry; const w = M(0x8b5e34);
+add(BX(0.12, 0.9, 0.12), w, -0.8, 0.45, 0, g); add(BX(0.12, 0.9, 0.12), w, 0.8, 0.45, 0, g);
+add(BX(1.9, 0.12, 0.08), w, 0, 0.65, 0, g); add(BX(1.9, 0.12, 0.08), w, 0, 0.35, 0, g); };
+fence(53, 61.5, 0.3); fence(78, 42.2, -0.2);
+const pine = (x, z, s) => { const g = grp(x, z, s);
+add(CY(0.09, 0.12, 0.5, 6), M(0x6b4423), 0, 0.25, 0, g);
+add(CN(0.7, 1.4, 8), M(0x2e6b34), 0, 1.1, 0, g); };
+pine(52, 43.5, 1.2); pine(80, 43, 1.2);
+put(buildProp(0, 'crystal'), 51.5, 49, 2.1);
+put(buildProp(0, 'crystal'), 81, 55, 2.1);
 scene.add(titleDecor);
 }
+
 
 const enemyMeshes = new Map();
 const hpBars = new Map();
