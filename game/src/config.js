@@ -29,13 +29,13 @@ export const DEFEAT_PER_WAVE = 100;
 
 export const WAVES = [
   { area: 0, groups: 5, perGroup: 5, hpMul: 1.0, spMul: 1.0 },
-  { area: 0, groups: 6, perGroup: 5, hpMul: 1.1, spMul: 1.0 },
-  { area: 0, groups: 6, perGroup: 6, hpMul: 1.2, spMul: 1.05 },
-  { area: 1, groups: 6, perGroup: 6, hpMul: 1.35, spMul: 1.05 },
-  { area: 1, groups: 7, perGroup: 6, hpMul: 1.5, spMul: 1.1 },
-  { area: 1, groups: 7, perGroup: 8, hpMul: 1.65, spMul: 1.1 },
-  { area: 2, groups: 8, perGroup: 8, hpMul: 1.8, spMul: 1.15 },
-  { area: 2, groups: 4, perGroup: 5, hpMul: 1.5, spMul: 1.15, boss: true },
+  { area: 0, groups: 6, perGroup: 5, hpMul: 1.2, spMul: 1.0 },
+  { area: 0, groups: 6, perGroup: 6, hpMul: 1.35, spMul: 1.05 },
+  { area: 1, groups: 6, perGroup: 6, hpMul: 1.5, spMul: 1.05 },
+  { area: 1, groups: 7, perGroup: 6, hpMul: 1.7, spMul: 1.1 },
+  { area: 1, groups: 7, perGroup: 8, hpMul: 1.9, spMul: 1.1 },
+  { area: 2, groups: 8, perGroup: 8, hpMul: 2.1, spMul: 1.15 },
+  { area: 2, groups: 4, perGroup: 5, hpMul: 1.8, spMul: 1.15, boss: true },
 ];
 export const AREA_NAMES = ['Bloomroot Warrens', 'Cinderglass Works', 'Moonmilk Vault'];
 
@@ -47,19 +47,40 @@ export const PLAYER = {
   energyMax: 100,
   energyRegen: 8,
   iframes: 0.65,
-  boltDamage: 8,
+  boltDamage: 5,
   boltInterval: 0.55,
   boltRange: 190,
   boltSpeed: 320,
-  attackCd: 0.35,
 };
 
-export const SKILLS = {
-  crescent: { name: 'Crescent Cut', cost: 20, cd: 4, range: 56, damage: 26 },
-  ember: { name: 'Ember Bloom', cost: 30, cd: 7, range: 160, patchRadius: 72, damage: 12, tick: 8, tickEvery: 0.5, tickTime: 2 },
-  glassguard: { name: 'Glassguard', cost: 25, cd: 9, shield: 35, shieldTime: 3, contactDamage: 10, contactEvery: 0.5 },
-  starfall: { name: 'Starfall', cost: 100, cd: 30, windup: 0.6, range: 135, damage: 90, knockback: 90,  },
-  frost: { name: 'Frost Nova', cost: 35, cd: 10, range: 200, freeze: 2.5, damage: 10,  },
+export const HEROES = {
+  neri: { name: 'Neri', file: 'neri.glb', prefix: 'Mage_',
+    hide: ['2H_Staff', '1H_Wand', 'Spellbook', 'Spellbook_open'],
+    cast: 'Spellcast_Shoot', castLong: 'Spellcast_Raise',
+    hp: 100, speed: 180, boltDmg: 5, boltRange: 190,
+    skills: [
+      { name: 'Bolt Burst', fx: 'fan', ic: 'bolt', cost: 20, cd: 4, n: 3, dmg: 6 },
+      { name: 'Ember Flame', fx: 'patch', ic: 'flame', cost: 30, cd: 7, range: 160, r: 72, dmg: 12, tick: 8, tickTime: 2 },
+      { name: 'Starfall', fx: 'rain', ic: 'star', cost: 100, cd: 30, windup: 0.6, range: 135, dmg: 90, kb: 90, n: 16, col: '#ffd76a' },
+    ] },
+  aldric: { name: 'Aldric', file: 'aldric.glb', prefix: 'Knight_',
+    hide: ['1H_Sword_Offhand', '2H_Sword', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield'],
+    cast: '1H_Melee_Attack_Slice_Horizontal', castLong: '2H_Melee_Attack_Spin',
+    hp: 130, speed: 165, boltDmg: 6, boltRange: 150,
+    skills: [
+      { name: 'Sword Arc', fx: 'arc', ic: 'sword', cost: 20, cd: 4, range: 70, dmg: 30, kb: 0 },
+      { name: 'Shield Charge', fx: 'charge', ic: 'shield', cost: 30, cd: 7, range: 70, dmg: 22, lunge: 90, kb: 40 },
+      { name: 'Whirlwind', fx: 'arc', ic: 'whirl', cost: 100, cd: 30, range: 150, dmg: 70, kb: 120 },
+    ] },
+  lyra: { name: 'Lyra', file: 'lyra.glb', prefix: 'Rogue_',
+    hide: ['1H_Crossbow', 'Knife', 'Knife_Offhand', 'Throwable'],
+    cast: '2H_Ranged_Shoot',
+    hp: 105, speed: 195, boltDmg: 6, boltRange: 230,
+    skills: [
+      { name: 'Arrow Volley', fx: 'fan', ic: 'arrows', cost: 20, cd: 4, n: 5, dmg: 8 },
+      { name: 'Frost Arrow', fx: 'frostshot', ic: 'frost', cost: 30, cd: 7, dmg: 14, freeze: 2.5 },
+      { name: 'Moonfall', fx: 'rain', ic: 'moon', cost: 100, cd: 30, windup: 0.6, range: 135, dmg: 100, kb: 60, n: 20, col: '#b9a9f0' },
+    ] },
 };
 
 export const ENEMIES = {
@@ -102,7 +123,7 @@ export const BULWARK_FROM_WAVE = 4;
 
 export const BOSS = {
   name: 'The Gloam Bell',
-  hp: 1300,
+  hp: 1600,
   speed: 48,
   radius: 16,
   moveRadius: 14,
@@ -156,7 +177,7 @@ export const UPGRADES = [  { id: 'wick', name: 'Bright Wick', cost: 12, cur: 'co
   { id: 'hands', name: 'Quick Hands', cost: 10, cur: 'coin', max: 2, desc: 'Bolt interval -0.08s', ic: 'bolt' },
   { id: 'thread', name: 'Long Thread', cost: 10, cur: 'coin', max: 2, desc: 'Bolt range +35px', ic: 'thread' },
   { id: 'cape', name: 'Padded Cape', cost: 14, cur: 'coin', max: 2, desc: '+20 max HP, heal 20', ic: 'cape' },
-  { id: 'charm', name: 'Shard Charm', cost: 2, cur: 'shard', max: 1, desc: 'Crescent +10, Ember tick +3, Starfall +15', ic: 'gem' },
+  { id: 'charm', name: 'Shard Charm', cost: 2, cur: 'shard', max: 1, desc: 'All skills +10 damage', ic: 'gem' },
 ];
 
 export const SHOP = [

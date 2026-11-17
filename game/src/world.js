@@ -1,6 +1,6 @@
 
 import * as THREE from 'three';
-import { TILE, FIELD_W, FIELD_H, AREAS, CAM } from './config.js';
+import { TILE, FIELD_W, FIELD_H, AREAS, CAM, HEROES } from './config.js';
 import { makeRng } from './random.js';
 import {
   buildLantern, buildAuraRing, buildMoth,
@@ -235,27 +235,29 @@ export function createWorld(canvas) {
   const damagePool = [];
   const telegraphPool = [];
   const aimPool = [];
-  let neri = null;
-  let neriLoading = null;
+  let hero = null;
+  const heroCache = {};
+  const heroLoading = {};
   let bossMesh = null;
   let slashMesh = null;
-  let shieldMesh = null;
   let emberMeshes = new Map();
   const streakPool = [];
 
-  async function loadNeri() {
-    if (neri) return neri;
-    if (neriLoading) return neriLoading;
-    neriLoading = (async () => {
+  async function loadHero(id) {
+    const H = HEROES[id] || HEROES.neri;
+    id = HEROES[id] ? id : 'neri';
+    if (heroCache[id]) { setHero(heroCache[id]); return heroCache[id]; }
+    if (heroLoading[id]) return heroLoading[id];
+    heroLoading[id] = (async () => {
       try {
-        const gltf = await new GLTFLoader().loadAsync('assets/neri.glb');
+        const gltf = await new GLTFLoader().loadAsync('assets/' + H.file);
         const model = gltf.scene;
-        const HIDDEN = new Set(['2H_Staff', '1H_Wand', 'Spellbook', 'Spellbook_open']);
+        const HIDDEN = new Set(H.hide);
         model.traverse((o) => { if (HIDDEN.has(o.name)) o.visible = false; });
         model.updateMatrixWorld(true);
         const bodyBox = new THREE.Box3();
         model.traverse((o) => {
-          if (o.isMesh && o.name.startsWith('Mage_')) bodyBox.expandByObject(o);
+          if (o.isMesh && o.name.startsWith(H.prefix)) bodyBox.expandByObject(o);
         });
         if (bodyBox.isEmpty()) bodyBox.setFromObject(model);
         const size = new THREE.Vector3();
@@ -265,25 +267,28 @@ export function createWorld(canvas) {
         model.updateMatrixWorld(true);
         const footBox = new THREE.Box3();
         model.traverse((o) => {
-          if (o.isMesh && o.name.startsWith('Mage_')) footBox.expandByObject(o);
+          if (o.isMesh && o.name.startsWith(H.prefix)) footBox.expandByObject(o);
         });
         if (!footBox.isEmpty()) model.position.y = -footBox.min.y;
         const group = new THREE.Group();
         group.add(model);
-        let hand = null;
-        model.traverse((o) => { if (!hand && (o.name === 'handslotl' || o.name === 'handl')) hand = o; });
-        if (!hand) model.traverse((o) => { if (!hand && (o.name === 'handslotr' || o.name === 'handr')) hand = o; });
-        const lantern = buildLantern();
-        if (hand) hand.add(lantern.group);
-        else { lantern.group.position.set(-0.7, 1.4, 0.2); group.add(lantern.group); }
-        const k = CAM.neriHeight / 2.6;
-        const aura = buildAuraRing();
-        aura.scale.setScalar(k);
-        group.add(aura);
-        const moth = buildMoth();
-        moth.position.set(0.75 * k, 2.0 * k, 0.3 * k);
-        moth.scale.setScalar(k);
-        group.add(moth);
+        let lantern = null, aura = null, moth = null;
+        if (id === 'neri') {
+          let hand = null;
+          model.traverse((o) => { if (!hand && (o.name === 'handslotl' || o.name === 'handl')) hand = o; });
+          if (!hand) model.traverse((o) => { if (!hand && (o.name === 'handslotr' || o.name === 'handr')) hand = o; });
+          lantern = buildLantern();
+          if (hand) hand.add(lantern.group);
+          else { lantern.group.position.set(-0.7, 1.4, 0.2); group.add(lantern.group); }
+          const k = CAM.neriHeight / 2.6;
+          aura = buildAuraRing();
+          aura.scale.setScalar(k);
+          group.add(aura);
+          moth = buildMoth();
+          moth.position.set(0.75 * k, 2.0 * k, 0.3 * k);
+          moth.scale.setScalar(k);
+          group.add(moth);
+        }
         group.visible = false;
         scene.add(group);
         let modelMat = null;
@@ -296,8 +301,8 @@ export function createWorld(canvas) {
           idle: pick('Idle', 'Unarmed_Idle'),
           walk: pick('Walking_A', 'Walking_B', 'Walking_C'),
           run: pick('Running_A', 'Running_B'),
-          cast: pick('Spellcast_Shoot', 'Spellcasting', 'Spellcast_Raise'),
-          castLong: pick('Spellcast_Raise', 'Spellcast_Long'),
+          cast: pick(H.cast, 'Spellcast_Shoot'),
+          castLong: pick(H.castLong, 'Spellcast_Raise'),
           hurt: pick('Hit_A', 'Hit_B'),
           death: pick('Death_A', 'Death_B'),
           cheer: pick('Cheer'),
@@ -306,21 +311,27 @@ export function createWorld(canvas) {
         for (const [k, clip] of Object.entries(defs)) if (clip) actions[k] = mixer.clipAction(clip);
         if (actions.idle) actions.idle.play();
         const built = {
-          group, model, modelMat, mixer, actions, lantern, aura, moth,
+          id, group, model, modelMat, mixer, actions, lantern, aura, moth,
           current: actions.idle || null, oneshot: null,
-          prevCd: { crescent: 0, ember: 0, glassguard: 0, starfall: 0, frost: 0 },
+          prevCd: { s1: 0, s2: 0, ult: 0 },
           prevHurt: 0, yawOffset: 0,
         };
         mixer.addEventListener('finished', (e) => { if (built.oneshot === e.action) built.oneshot = null; });
-        neri = built;
-        return neri;
+        heroCache[id] = built;
+        setHero(built);
+        return built;
       } catch (err) {
-        console.error('[mosslight] neri.glb failed to load', err);
-        neriLoading = null;
+        console.error('[mosslight] hero glb failed to load', id, err);
+        heroLoading[id] = null;
         return null;
       }
     })();
-    return neriLoading;
+    return heroLoading[id];
+  }
+
+  function setHero(built) {
+    if (hero && hero !== built) hero.group.visible = false;
+    hero = built;
   }
 
   function getProj() {
@@ -455,67 +466,55 @@ export function createWorld(canvas) {
 
   function sync(sim, dt) {
     const p = sim.player;
-    if (!neri && !neriLoading) loadNeri();
-    if (neri) {
-      const pg = neri.group;
+    const hid = sim.heroId || 'neri';
+    if (!hero || hero.id !== hid) loadHero(hid);
+    if (hero) {
+      const pg = hero.group;
       pg.visible = true;
       pg.position.set(toX(p.x), 0, toZ(p.y));
-      pg.rotation.y = Math.PI / 2 - (p.faceAngle || 0) + neri.yawOffset;
-      const a = neri.actions;
-      const mvx = p.x - (neri.px ?? p.x), mvy = p.y - (neri.py ?? p.y);
+      pg.rotation.y = Math.PI / 2 - (p.faceAngle || 0) + hero.yawOffset;
+      const a = hero.actions;
+      const mvx = p.x - (hero.px ?? p.x), mvy = p.y - (hero.py ?? p.y);
       const v = dt > 0 ? Math.hypot(mvx, mvy) / dt : 0;
-      neri.px = p.x; neri.py = p.y;
+      hero.px = p.x; hero.py = p.y;
       const loop = !p.moving ? 'idle' : (v > 110 ? 'run' : 'walk');
-      neri.dustT = (neri.dustT || 0) - dt;
-      if (p.moving && v > 60 && neri.dustT <= 0) {
-        neri.dustT = 0.18;
+      hero.dustT = (hero.dustT || 0) - dt;
+      if (p.moving && v > 60 && hero.dustT <= 0) {
+        hero.dustT = 0.18;
         sim.particles.push({ x: p.x, y: p.y + 10, z: 0.25, vx: 0, vy: 0, vz: 18, life: 0.4, maxLife: 0.4, color: '#d8c9a3', rot: 0 });
       }
-      if (p.hurtT > 0 && neri.prevHurt <= 0 && a.hurt) neri.oneshot = a.hurt;
-      neri.prevHurt = p.hurtT;
-      for (const k of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
+      if (p.hurtT > 0 && hero.prevHurt <= 0 && a.hurt) hero.oneshot = a.hurt;
+      hero.prevHurt = p.hurtT;
+      for (const k of ['s1', 's2', 'ult']) {
         const cd = p.cooldowns[k] || 0;
-        if (neri.prevCd[k] <= 0.05 && cd > 1) {
-          neri.oneshot = (k === 'starfall' && a.castLong) ? a.castLong : a.cast;
+        if (hero.prevCd[k] <= 0.05 && cd > 1) {
+          hero.oneshot = (k === 'ult' && a.castLong) ? a.castLong : a.cast;
         }
-        neri.prevCd[k] = cd;
+        hero.prevCd[k] = cd;
       }
-      if (sim.done?.result === 'victory' && a.cheer && neri.current !== a.cheer) neri.oneshot = a.cheer;
-      if (sim.done?.result === 'defeat' && a.death && neri.current !== a.death) neri.oneshot = a.death;
-      const want = neri.oneshot || a[loop] || a.idle || null;
-      if (want && neri.current !== want) {
-        const prev = neri.current;
+      if (sim.done?.result === 'victory' && a.cheer && hero.current !== a.cheer) hero.oneshot = a.cheer;
+      if (sim.done?.result === 'defeat' && a.death && hero.current !== a.death) hero.oneshot = a.death;
+      const want = hero.oneshot || a[loop] || a.idle || null;
+      if (want && hero.current !== want) {
+        const prev = hero.current;
         want.reset();
-        if (want === neri.oneshot) { want.setLoop(THREE.LoopOnce, 1); want.clampWhenFinished = true; }
+        if (want === hero.oneshot) { want.setLoop(THREE.LoopOnce, 1); want.clampWhenFinished = true; }
         else { want.setLoop(THREE.LoopRepeat, Infinity); want.clampWhenFinished = false; }
         want.play();
         if (prev) prev.crossFadeTo(want, 0.15, false);
         else want.fadeIn(0.15);
-        neri.current = want;
+        hero.current = want;
       }
-      neri.mixer.update(Math.min(dt, 0.05));
-      neri.lantern.parts.light.intensity = 24 + Math.sin(sim.time * 7) * 3;
-      neri.moth.position.y = 2.0 + Math.sin(sim.time * 2.2) * 0.16;
-      neri.moth.position.x = 0.75 + Math.sin(sim.time * 1.5) * 0.1;
-      neri.aura.material.opacity = 0.24 + Math.sin(sim.time * 3) * 0.06;
-      if (neri.modelMat && neri.modelMat.emissive) {
-        neri.modelMat.emissive.setHex(p.hurtT > 0 ? 0x881111 : 0x000000);
+      hero.mixer.update(Math.min(dt, 0.05));
+      if (hero.lantern) {
+        hero.lantern.parts.light.intensity = 24 + Math.sin(sim.time * 7) * 3;
+        hero.moth.position.y = 2.0 + Math.sin(sim.time * 2.2) * 0.16;
+        hero.moth.position.x = 0.75 + Math.sin(sim.time * 1.5) * 0.1;
+        hero.aura.material.opacity = 0.24 + Math.sin(sim.time * 3) * 0.06;
       }
-    }
-
-    if (p.shield > 0) {
-      if (!shieldMesh) {
-        shieldMesh = new THREE.Mesh(
-          new THREE.SphereGeometry(2.4, 18, 12),
-          new THREE.MeshBasicMaterial({ color: 0x7fd4ff, transparent: true, opacity: 0.28, depthWrite: false }),
-        );
-        scene.add(shieldMesh);
+      if (hero.modelMat && hero.modelMat.emissive) {
+        hero.modelMat.emissive.setHex(p.hurtT > 0 ? 0x881111 : 0x000000);
       }
-      shieldMesh.visible = true;
-      shieldMesh.position.set(toX(p.x), 1.2, toZ(p.y));
-      shieldMesh.material.opacity = 0.32 + Math.sin(sim.time * 6) * 0.08;
-    } else if (shieldMesh) {
-      shieldMesh.visible = false;
     }
 
     const seenEnemies = new Set();
@@ -797,5 +796,5 @@ export function createWorld(canvas) {
     renderer.setPixelRatio(r);
   }
 
-  return { setField, setArea, sync, render, resize, setPixelRatio, loadNeri, isNeriLoaded: () => !!neri, scene, camera, renderer };
+  return { setField, setArea, sync, render, resize, setPixelRatio, loadHero, isHeroLoaded: () => !!hero, scene, camera, renderer };
 }

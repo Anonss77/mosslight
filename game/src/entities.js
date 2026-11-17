@@ -1,5 +1,5 @@
 
-import { PLAYER, SKILLS, ENEMIES, BOSS, LOOT, FEEL } from './config.js';
+import { PLAYER, HEROES, ENEMIES, BOSS, LOOT, FEEL } from './config.js';
 
 export class SpatialHash {
   constructor(cell = 64) {
@@ -33,17 +33,17 @@ let nextId = 1;
 export function freshIds() { nextId = 1; }
 function nid() { return nextId++; }
 
-export function createPlayer(x, y) {
+export function createPlayer(x, y, heroId = 'neri') {
+  const H = HEROES[heroId] || HEROES.neri;
   return {
-    x, y, hp: PLAYER.maxHp, maxHp: PLAYER.maxHp,
+    x, y, hp: H.hp, maxHp: H.hp,
     energy: PLAYER.energyMax,
-    speed: PLAYER.speed,
+    speed: H.speed,
     radius: PLAYER.radius, moveRadius: PLAYER.moveRadius,
     boltTimer: 0,
-    manualCd: 0,
-    boltDamage: PLAYER.boltDamage, boltInterval: PLAYER.boltInterval, boltRange: PLAYER.boltRange,
-    cooldowns: { crescent: 0, ember: 0, glassguard: 0, starfall: 0, frost: 0 },
-    shield: 0, shieldT: 0,
+    boltDamage: H.boltDmg, boltInterval: PLAYER.boltInterval, boltRange: H.boltRange,
+    cooldowns: { s1: 0, s2: 0, ult: 0 },
+    charmDmg: 0,
     iframesT: 0, castT: 0, hurtT: 0,
     starfallWindup: 0, starfallX: 0, starfallY: 0,
     upgrades: { wick: 0, hands: 0, thread: 0, cape: 0, charm: 0 },

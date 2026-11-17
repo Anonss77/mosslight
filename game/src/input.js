@@ -16,11 +16,9 @@ export class Input {
       window.__keys.add(e.code);
       if (e.repeat) return;
       if (e.code === 'KeyJ' || e.code === 'Space') window.__castQueue.push('attack');
-      else if (e.code === 'KeyQ') window.__castQueue.push('crescent');
-      else if (e.code === 'KeyE') window.__castQueue.push('ember');
-      else if (e.code === 'KeyR') window.__castQueue.push('glassguard');
-      else if (e.code === 'KeyF') window.__castQueue.push('starfall');
-      else if (e.code === 'KeyC') window.__castQueue.push('frost');
+      else if (e.code === 'KeyQ') window.__castQueue.push('s1');
+      else if (e.code === 'KeyE') window.__castQueue.push('s2');
+      else if (e.code === 'KeyR') window.__castQueue.push('ult');
       else if (e.code === 'KeyB' && this.onBag) this.onBag();
       else if (e.code === 'Escape' && this.onPause) this.onPause();
     });

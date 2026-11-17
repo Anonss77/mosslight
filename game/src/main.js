@@ -1,5 +1,6 @@
 
 import { Game, STEP, ic } from './game.js';
+import { HEROES } from './config.js';
 import { createWorld } from './world.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
@@ -13,6 +14,7 @@ window.addEventListener('orientationchange', fitStage);
 const params = new URLSearchParams(location.search);
 const seed = parseInt(params.get('seed') || '20261116', 10);
 const shot = params.get('shot');
+const heroParam = params.get('hero');
 const autotest = params.get('autotest') === '1';
 const speed = Math.max(1, Math.min(30, parseInt(params.get('speed') || '10', 10)));
 
@@ -26,7 +28,7 @@ const world = autotest
 
 if (!autotest) fitStage();
 
-const game = new Game(world, audio, { seed, autotest: autotest || !!shot, shot: shot || null, speed });
+const game = new Game(world, audio, { seed, hero: HEROES[heroParam] ? heroParam : 'neri', autotest: autotest || !!shot, shot: shot || null, speed });
 window.__mosslight = { game, shotReady: false, done: null };
 
 const $ = (id) => document.getElementById(id);
@@ -52,6 +54,38 @@ function startRunWithSeed(s) {
   showHud();
 }
 
+function syncSkillButtons() {
+  const H = HEROES[game.heroId];
+  for (let i = 0; i < 3; i++) {
+    const btn = $('skill-' + i);
+    if (!btn) continue;
+    const s = H.skills[i];
+    btn.querySelector('img').src = 'i/' + s.ic + '.png';
+    btn.title = s.name;
+  }
+  const hh = $('helpHero');
+  if (hh) hh.textContent = H.name;
+}
+
+function selectHero(id) {
+  if (!HEROES[id] || game.state !== 'title') return;
+  game.heroId = id;
+  game.buildRun();
+  world.loadHero(id);
+  for (const el of document.querySelectorAll('.hero-card')) {
+    el.classList.toggle('sel', el.dataset.hero === id);
+  }
+  syncSkillButtons();
+}
+
+for (const el of document.querySelectorAll('.hero-card')) {
+  el.addEventListener('click', () => selectHero(el.dataset.hero));
+}
+try {
+  const b = +localStorage.getItem('mosslight-best') || 0;
+  if (b) $('bestTally').textContent = 'Best: ' + b;
+} catch (e) {}
+
 $('startBtn').addEventListener('click', () => {
   startRunWithSeed(game.seed);
   audio.unlock();
@@ -64,10 +98,13 @@ $('titleBtn').addEventListener('click', () => {
   game.state = 'title';
   showTitle();
 });
-$('muteBtn').addEventListener('click', () => {
-  const muted = audio.toggleMute();
-  $('muteBtn').innerHTML = ic(muted ? 'audioOff' : 'audioOn');
-});
+function syncMute() {
+  const m = audio.muted;
+  $('muteBtn').innerHTML = ic(m ? 'audioOff' : 'audioOn');
+  $('titleMuteBtn').textContent = m ? '♪ Sound: Off' : '♪ Sound: On';
+}
+$('muteBtn').addEventListener('click', () => { audio.toggleMute(); syncMute(); });
+$('titleMuteBtn').addEventListener('click', () => { audio.toggleMute(); syncMute(); });
 
 let paused = false;
 let bagOpen = false;
@@ -115,10 +152,11 @@ input.onBag = () => { if (game.state === 'playing' || bagOpen) setBag(!bagOpen);
 input.bindJoystick($('joystick'), $('joyThumb'));
 input.bindCamera($('game'));
 $('camBtn').addEventListener('click', () => { if (window.__cam) { window.__cam.az = 0; window.__cam.tilt = 38; window.__cam.vaz = 0; window.__cam.vtilt = 0; } });
-for (const id of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
-  input.bindSkillButton($('skill-' + id), id);
+for (let i = 0; i < 3; i++) {
+  input.bindSkillButton($('skill-' + i), ['s1', 's2', 'ult'][i]);
 }
 input.bindSkillButton($('attackBtn'), 'attack');
+syncSkillButtons();
 
 if (autotest) {
 
@@ -136,8 +174,8 @@ if (autotest) {
   runChunk();
 } else {
 
-  world.loadNeri();
-  if (shot && shot !== 'start') {
+  world.loadHero(game.heroId);
+  if (shot && shot !== 'start' && shot !== 'heroselect') {
     showHud();
     game.startRun();
   } else {
@@ -154,7 +192,7 @@ if (autotest) {
     if (game.shotReady) {
 
       world.render();
-      if (shot && !window.__mosslight.shotReady && world.isNeriLoaded()) {
+      if (shot && !window.__mosslight.shotReady && world.isHeroLoaded()) {
         window.__mosslight.shotReady = true;
       }
       return;
@@ -163,7 +201,7 @@ if (autotest) {
 
       world.sync(game, dt);
       world.render();
-      if ((frames > 40 && world.isNeriLoaded()) || frames > 300) {
+      if ((frames > 40 && world.isHeroLoaded()) || frames > 300) {
         game.shotReady = true;
         window.__mosslight.shotReady = true;
       }

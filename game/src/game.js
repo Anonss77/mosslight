@@ -4,7 +4,7 @@ import {
   WAVE_TIME, INTERMISSION_TIME, WAVE_COUNT, WAVES, AREA_NAMES, AREAS,
   MAX_ENEMIES, SPAWN_GROUP_EVERY, SPAWN_MIN_DIST,
   VICTORY_BONUS, DEFEAT_PER_WAVE,
-  PLAYER, SKILLS, ENEMIES, BOSS, LOOT, UPGRADES, SHOP, FEEL,
+  PLAYER, HEROES, ENEMIES, BOSS, LOOT, UPGRADES, SHOP, FEEL,
   COS05, SIN05, COS06, SIN06, FAN_OFF,
 } from './config.js';
 import { makeRng } from './random.js';
@@ -30,6 +30,8 @@ export class Game {
     this.audio = audio;
     this.opts = opts;
     this.seed = opts.seed ?? 20261116;
+    this.heroId = HEROES[opts.hero] ? opts.hero : 'neri';
+    this.hero = HEROES[this.heroId];
     this.rng = makeRng(this.seed);
     this.vrng = makeRng((this.seed ^ 0x51ab3f) >>> 0);
     this.state = 'title';
@@ -86,7 +88,8 @@ export class Game {
     this.field = generateField(this.seed);
     this.world.setField(this.field);
 
-    this.player = createPlayer(FIELD_W / 2, FIELD_H / 2);
+    this.player = createPlayer(FIELD_W / 2, FIELD_H / 2, this.heroId);
+    this.hero = HEROES[this.heroId];
     this.area = 0;
     this.enemies = [];
     this.projectiles = [];
@@ -169,7 +172,7 @@ export class Game {
     if (u.id === 'hands') p.boltInterval = Math.max(0.2, p.boltInterval - 0.08);
     if (u.id === 'thread') p.boltRange += 35;
     if (u.id === 'cape') { p.maxHp += 20; p.hp = Math.min(p.maxHp, p.hp + 20); }
-    if (u.id === 'charm') { p.charmCrescent = (p.charmCrescent || 0) + 10; p.charmEmber = (p.charmEmber || 0) + 3; p.charmStar = (p.charmStar || 0) + 15; }
+    if (u.id === 'charm') p.charmDmg = (p.charmDmg || 0) + 10;
     this.offers = this.offers.filter((o) => o.id !== id);
     this.audio.play('buy');
     this.updateHUD();
@@ -274,9 +277,7 @@ export class Game {
     p.castT = Math.max(0, p.castT - dt);
     p.hurtT = Math.max(0, p.hurtT - dt);
     for (const k of Object.keys(p.cooldowns)) p.cooldowns[k] = Math.max(0, p.cooldowns[k] - dt);
-    p.manualCd = Math.max(0, p.manualCd - dt);
     p.energy = Math.min(PLAYER.energyMax, p.energy + PLAYER.energyRegen * dt);
-    if (p.shieldT > 0) { p.shieldT -= dt; if (p.shieldT <= 0) p.shield = 0; }
     if (p.starfallWindup > 0) {
       p.starfallWindup -= dt;
       if (p.starfallWindup <= 0) this.fireStarfall();
@@ -392,8 +393,6 @@ export class Game {
   manualAttack() {
     const p = this.player;
     if (this.state !== 'playing' || p.dead || p.starfallWindup > 0) return false;
-    if (p.manualCd > 0) return false;
-    p.manualCd = PLAYER.attackCd;
     const target = this.nearestTarget(p.boltRange, true);
     let ux = p.fx, uy = p.fy;
     if (target) {
@@ -433,58 +432,96 @@ export class Game {
     this.audio.play('bolt');
   }
 
+  shove(e, x, y, kb) {
+    const dx = e.x - x, dy = e.y - y, d = Math.hypot(dx, dy) || 1;
+    const m = moveField(e.x, e.y, e.moveRadius, (dx / d) * kb, (dy / d) * kb);
+    e.x = m.x; e.y = m.y;
+  }
+
+  aimAt() {
+    const p = this.player;
+    const t = this.nearestTarget(p.boltRange, true);
+    if (!t) return p.faceAngle;
+    const a = Math.atan2(t.y - p.y, t.x - p.x);
+    p.faceAngle = a; p.fx = Math.cos(a); p.fy = Math.sin(a);
+    return a;
+  }
+
   castSkill(id) {
     const p = this.player;
     if (this.state !== 'playing' || p.dead || p.starfallWindup > 0) return false;
-    const s = SKILLS[id];
-    if (!s) return false;
+    const slot = id === 's1' ? 0 : id === 's2' ? 1 : id === 'ult' ? 2 : -1;
+    if (slot < 0) return false;
+    const s = this.hero.skills[slot];
     if (p.cooldowns[id] > 0) { this.deny = { id, msg: 'Masih cooldown!', until: this.time + 1 }; this.updateHUD(); return false; }
     if (p.energy < s.cost) { this.deny = { id, msg: `Need ${s.cost} energy!`, until: this.time + 1 }; this.updateHUD(); return false; }
     p.energy -= s.cost;
     p.cooldowns[id] = s.cd;
     p.castT = 0.16;
-    if (id === 'crescent') {
-      const dmg = s.damage + (p.charmCrescent || 0);
+    const bonus = p.charmDmg || 0;
+    if (s.fx === 'fan') {
+      const dmg = s.dmg + bonus;
+      const a0 = this.aimAt();
+      for (let i = 0; i < s.n; i++) {
+        const a = a0 + (i - (s.n - 1) / 2) * 0.16;
+        this.projectiles.push(createProjectile(
+          p.x + Math.cos(a) * 14, p.y + Math.sin(a) * 14,
+          Math.cos(a) * PLAYER.boltSpeed, Math.sin(a) * PLAYER.boltSpeed, dmg, 'bolt', 2,
+        ));
+      }
+      burstParticles(this.particles, this.vrng, p.x + p.fx * 14, p.y + p.fy * 14, '#ffe9a8', 4, 90);
+      this.audio.play('bolt');
+    } else if (s.fx === 'patch') {
+      const target = this.nearestTarget(s.range, true);
+      let ax, ay;
+      if (target) { ax = target.x; ay = target.y; }
+      else { ax = p.x + p.fx * 100; ay = p.y + p.fy * 100; }
+      const patch = { x: ax, y: ay, r: s.r, life: s.tickTime, tickT: 0.5, tickEvery: 0.5, tick: s.tick + bonus };
+      this.embers.push(patch);
+      burstParticles(this.particles, this.vrng, ax, ay, '#ff8a2a', 24, 170);
+      for (const e of [...this.enemies]) {
+        if (dist(ax, ay, e.x, e.y) <= s.r + e.radius) this.damageEnemy(e, s.dmg + bonus, 'skill', '#ff8a2a');
+      }
+      if (this.boss && dist(ax, ay, this.boss.x, this.boss.y) <= s.r + this.boss.radius) this.damageBoss(s.dmg + bonus, 'skill');
+      this.audio.play('ember');
+    } else if (s.fx === 'arc' || s.fx === 'charge') {
+      if (s.fx === 'charge') {
+        const m = moveField(p.x, p.y, p.moveRadius, p.fx * s.lunge, p.fy * s.lunge);
+        p.x = m.x; p.y = m.y;
+      }
+      const dmg = s.dmg + bonus;
+      const col = s.fx === 'charge' ? '#7fd4ff' : '#ffd76a';
       const a = p.faceAngle;
       this.slash = { x: p.x, y: p.y, angle: a, life: 0.3, maxLife: 0.3 };
-      burstParticles(this.particles, this.vrng, p.x, p.y, '#ffd76a', 20, 180);
+      burstParticles(this.particles, this.vrng, p.x, p.y, col, 20, 180);
       let hits = 0;
       for (const e of [...this.enemies]) {
-        if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) { this.damageEnemy(e, dmg, 'skill', '#ffd76a'); hits++; }
+        if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) {
+          this.damageEnemy(e, dmg, 'skill', col);
+          if (s.kb) this.shove(e, p.x, p.y, s.kb);
+          hits++;
+        }
       }
       if (this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= s.range + this.boss.radius) {
         this.damageBoss(dmg, 'skill');
         hits++;
       }
       if (hits > 0) this.hitstop = FEEL.hitstopCrescent;
-      this.audio.play('slash');
-    } else if (id === 'ember') {
-      const target = this.nearestTarget(s.range, true);
-      let ax, ay;
-      if (target) { ax = target.x; ay = target.y; }
-      else { ax = p.x + p.fx * 100; ay = p.y + p.fy * 100; }
-      const patch = { id: this.embers.length + 1, x: ax, y: ay, r: s.patchRadius, life: s.tickTime, tickT: SKILLS.ember.tickEvery, tick: s.tick + (p.charmEmber || 0), damage: s.damage };
-      this.embers.push(patch);
-      burstParticles(this.particles, this.vrng, ax, ay, '#ff8a2a', 24, 170);
-      for (const e of [...this.enemies]) {
-        if (dist(ax, ay, e.x, e.y) <= s.patchRadius + e.radius) this.damageEnemy(e, s.damage, 'skill', '#ff8a2a');
-      }
-      if (this.boss && dist(ax, ay, this.boss.x, this.boss.y) <= s.patchRadius + this.boss.radius) this.damageBoss(s.damage, 'skill');
-      this.audio.play('ember');
-    } else if (id === 'glassguard') {
-      p.shield = s.shield;
-      p.shieldT = s.shieldTime;
-      this.audio.play('shield');
-    } else if (id === 'starfall') {
+      this.audio.play(s.fx === 'charge' ? 'shield' : 'slash');
+      if (s.fx === 'charge') this.audio.play('slash');
+    } else if (s.fx === 'rain') {
+      p.ultDef = s;
       p.starfallWindup = s.windup;
       p.starfallX = p.x; p.starfallY = p.y;
       this.audio.play('starfall');
-    } else if (id === 'frost') {
-      for (const e of [...this.enemies]) {
-        if (dist(p.x, p.y, e.x, e.y) <= s.range + e.radius) { e.frozenT = s.freeze; this.damageEnemy(e, s.damage, 'skill', '#7fd4ff'); }
-      }
-      burstParticles(this.particles, this.vrng, p.x, p.y, '#7fd4ff', 28, 200);
-      this.telegraphs.push({ kind: 'flash', x: p.x, y: p.y, r: s.range, life: 0.45, maxLife: 0.45, color: 0x7fd4ff, final: true });
+    } else if (s.fx === 'frostshot') {
+      const a0 = this.aimAt();
+      const pr = createProjectile(
+        p.x + Math.cos(a0) * 14, p.y + Math.sin(a0) * 14,
+        Math.cos(a0) * PLAYER.boltSpeed, Math.sin(a0) * PLAYER.boltSpeed, s.dmg + bonus, 'frostbolt', 2,
+      );
+      pr.freeze = s.freeze;
+      this.projectiles.push(pr);
       this.audio.play('frost');
     }
     this.updateHUD();
@@ -516,25 +553,22 @@ export class Game {
 
   fireStarfall() {
     const p = this.player;
-    const s = SKILLS.starfall;
-    const dmg = s.damage + (p.charmStar || 0);
+    const s = p.ultDef;
+    const dmg = s.dmg + (p.charmDmg || 0);
     const cx = p.starfallX, cy = p.starfallY;
 
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2 + 0.4;
+    for (let i = 0; i < s.n; i++) {
+      const a = (i / s.n) * Math.PI * 2 + 0.4;
       this.streaks.push({ x: cx + Math.cos(a) * 60, y: cy + Math.sin(a) * 60, h: 9, t: 0 });
     }
-    burstParticles(this.particles, this.vrng, cx, cy, '#ffd76a', 48, 260);
+    burstParticles(this.particles, this.vrng, cx, cy, s.col, 48, 260);
     this.audio.play('boom');
     this.telegraphs.push({ kind: 'flash', x: cx, y: cy, r: s.range, life: 0.5, maxLife: 0.5, color: 0xffd76a, final: true });
     let hitBoss = false;
     for (const e of [...this.enemies]) {
       if (dist(cx, cy, e.x, e.y) <= s.range + e.radius) {
-        this.damageEnemy(e, dmg, 'skill', '#ffd76a');
-        const dx = e.x - cx, dy = e.y - cy;
-        const d = Math.hypot(dx, dy) || 1;
-        const m = moveField(e.x, e.y, e.moveRadius, (dx / d) * s.knockback, (dy / d) * s.knockback);
-        e.x = m.x; e.y = m.y;
+        this.damageEnemy(e, dmg, 'skill', s.col);
+        this.shove(e, cx, cy, s.kb);
       }
     }
     if (this.boss && dist(cx, cy, this.boss.x, this.boss.y) <= s.range + this.boss.radius) {
@@ -618,21 +652,13 @@ export class Game {
   damagePlayer(dmg, source = '') {
     const p = this.player;
     if (p.dead || p.iframesT > 0) return;
-    let rest = dmg;
-    if (p.shield > 0) {
-      const absorbed = Math.min(p.shield, rest);
-      p.shield -= absorbed;
-      rest -= absorbed;
-    }
-    if (rest > 0) {
-      p.hp -= rest;
-      this.chain = 0;
-      p.iframesT = PLAYER.iframes;
-      p.hurtT = 0.25;
-      this.shake(FEEL.shakePlayerHit.amp, FEEL.shakePlayerHit.time);
-      addDamageNumber(this.damageNumbers, p.x, p.y - 20, Math.round(rest), '#ff6b7a', 20);
-      this.audio.play('hurt');
-    }
+    p.hp -= dmg;
+    this.chain = 0;
+    p.iframesT = PLAYER.iframes;
+    p.hurtT = 0.25;
+    this.shake(FEEL.shakePlayerHit.amp, FEEL.shakePlayerHit.time);
+    addDamageNumber(this.damageNumbers, p.x, p.y - 20, Math.round(dmg), '#ff6b7a', 20);
+    this.audio.play('hurt');
     if (p.hp <= 0) {
       p.hp = 0;
       p.dead = true;
@@ -663,11 +689,6 @@ export class Game {
       if (e.type === 'puffcap' || e.type === 'wisp') this.updatePuffcap(e, dt, d);
       else if (e.type === 'tinket') this.updateTinket(e, dt, d);
       else this.updateBrambler(e, dt, d);
-
-      if (p.shield > 0 && d < e.radius + p.radius && e.contactCd <= 0) {
-        e.contactCd = SKILLS.glassguard.contactEvery;
-        this.damageEnemy(e, SKILLS.glassguard.contactDamage, 'skill', '#7fe8ff');
-      }
     }
 
     const list = this.enemies;
@@ -830,6 +851,7 @@ export class Game {
     if (!b) return;
     const p = this.player;
     b.flashT = Math.max(0, b.flashT - dt);
+    if ((b.frozenT || 0) > 0) { b.frozenT -= dt; b.moving = false; return; }
     const speedMul = b.phase === 2 ? BOSS.phase2SpeedMul : 1;
     const moveSpeed = b.speed * (b.phase === 3 ? BOSS.phase3MoveMul : 1);
     const d = dist(b.x, b.y, p.x, p.y);
@@ -967,16 +989,18 @@ export class Game {
         continue;
       }
       pr.x = nx; pr.y = ny;
-      if (pr.kind === 'bolt') {
+      if (pr.kind === 'bolt' || pr.kind === 'frostbolt') {
 
         if (this.boss && dist(pr.x, pr.y, this.boss.x, this.boss.y) <= this.boss.radius + pr.radius) {
           this.damageBoss(pr.damage, 'bolt');
+          if (pr.kind === 'frostbolt') this.boss.frozenT = pr.freeze;
           this.projectiles.splice(i, 1);
           continue;
         }
         let hit = false;
         for (const e of [...this.enemies]) {
           if (dist(pr.x, pr.y, e.x, e.y) <= e.radius + pr.radius) {
+            if (pr.kind === 'frostbolt') e.frozenT = pr.freeze;
             this.damageEnemy(e, pr.damage, 'bolt');
             hit = true;
             break;
@@ -1065,7 +1089,7 @@ export class Game {
       e.life -= dt;
       e.tickT -= dt;
       if (e.tickT <= 0) {
-        e.tickT = SKILLS.ember.tickEvery;
+        e.tickT = e.tickEvery;
         for (const en of [...this.enemies]) {
           if (dist(e.x, e.y, en.x, en.y) <= e.r + en.radius) this.damageEnemy(en, e.tick, 'skill', '#ff8a2a');
         }
@@ -1339,23 +1363,22 @@ export class Game {
 
     const nearCount = (r) => this.enemies.filter((e) => dist(p.x, p.y, e.x, e.y) <= r).length
       + (this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= r ? 1 : 0);
-    if (p.cooldowns.crescent <= 0 && p.energy >= SKILLS.crescent.cost && nearCount(SKILLS.crescent.range + 10) >= 2) {
-      this.castSkill('crescent');
-    }
-    if (p.cooldowns.ember <= 0 && p.energy >= SKILLS.ember.cost && (this.boss || nearCount(120) >= 2)) {
-      this.castSkill('ember');
-    }
-    if (p.cooldowns.glassguard <= 0 && p.energy >= SKILLS.glassguard.cost && p.hp < 50 && nearCount(70) >= 1) {
-      this.castSkill('glassguard');
-    }
-    if (p.cooldowns.starfall <= 0 && p.energy >= SKILLS.starfall.cost
-      && ((this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= SKILLS.starfall.range) || nearCount(SKILLS.starfall.range) >= 4)) {
-      this.castSkill('starfall');
-    }
-    if (SKILLS.frost && p.cooldowns.frost <= 0 && p.energy >= SKILLS.frost.cost && nearCount(SKILLS.frost.range) >= 3) {
-      this.castSkill('frost');
-    }
-    if (this.nearestTarget(p.boltRange, true)) this.manualAttack();
+    const sk = this.hero.skills;
+    const tryCast = (i, cond) => {
+      const k = ['s1', 's2', 'ult'][i];
+      if (p.cooldowns[k] <= 0 && p.energy >= sk[i].cost && cond()) this.castSkill(k);
+    };
+    // Melee skills (arc/charge) need an enemy in reach; ranged skills
+    // just need a target on screen.
+    const inRange = (i) => {
+      const s = sk[i];
+      return (s.fx === 'arc' || s.fx === 'charge') ? nearCount(s.range + 10) >= 1 : !!this.nearestTarget(220, true);
+    };
+    tryCast(0, () => inRange(0));
+    tryCast(1, () => inRange(1));
+    tryCast(2, () => (this.boss && dist(p.x, p.y, this.boss.x, this.boss.y) <= sk[2].range) || nearCount(sk[2].range) >= 4);
+    p.botAtkT = Math.max(0, (p.botAtkT || 0) - dt);
+    if (p.botAtkT <= 0 && this.nearestTarget(p.boltRange, true)) { this.manualAttack(); p.botAtkT = 0.2; }
 
     if (this.bag.heart > 0 && p.hp < p.maxHp * 0.5) this.useBagItem('heart');
     else if (this.bag.bomb > 0 && nearCount(280) >= 5) this.useBagItem('bomb');
@@ -1413,21 +1436,16 @@ export class Game {
       }
     }
 
-    for (const id of ['crescent', 'ember', 'glassguard', 'starfall', 'frost']) {
-      const btn = document.getElementById(`skill-${id}`);
+    for (let i = 0; i < 3; i++) {
+      const btn = document.getElementById(`skill-${i}`);
       if (!btn) continue;
-      const cd = p.cooldowns[id] / SKILLS[id].cd;
+      const k = ['s1', 's2', 'ult'][i], s = this.hero.skills[i];
+      const cd = p.cooldowns[k] / s.cd;
       btn.style.setProperty('--cd', String(cd));
-      btn.classList.toggle('ready', cd <= 0 && p.energy >= SKILLS[id].cost);
+      btn.classList.toggle('ready', cd <= 0 && p.energy >= s.cost);
       btn.classList.toggle('cooling', cd > 0);
-      btn.classList.toggle('poor', cd <= 0 && p.energy < SKILLS[id].cost);
-      btn.classList.toggle('deny', !!(this.deny && this.deny.id === id && this.time < this.deny.until));
-    }
-    const atkBtn = document.getElementById('attackBtn');
-    if (atkBtn) {
-      atkBtn.style.setProperty('--cd', String(p.manualCd / PLAYER.attackCd));
-      atkBtn.classList.toggle('ready', p.manualCd <= 0);
-      atkBtn.classList.toggle('cooling', p.manualCd > 0);
+      btn.classList.toggle('poor', cd <= 0 && p.energy < s.cost);
+      btn.classList.toggle('deny', !!(this.deny && this.deny.id === k && this.time < this.deny.until));
     }
     const toastEl = $('toastText');
     if (toastEl) toastEl.textContent = this.toast && this.time < this.toast.until ? this.toast.msg : '';
@@ -1572,7 +1590,9 @@ export class Game {
     const shot = this.opts.shot;
     if (!shot) return false;
     if (shot === 'start') return this.state === 'title';
+    if (shot === 'heroselect') return this.state === 'title';
     if (shot === 'intermission') return this.state === 'intermission' && this.offers.length >= 2;
+    if (shot === 'ult') return this.state === 'playing' && this.streaks.length >= 8;
     if (this.state !== 'playing') return false;
     if (shot === 'combat') {
 

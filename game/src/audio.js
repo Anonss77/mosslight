@@ -104,10 +104,6 @@ export class Audio {
         this.noise(0.35, 0.25, 900, 'lowpass');
         this.tone('sawtooth', 180, 60, 0.3, 0.18);
         break;
-      case 'shield':
-        this.tone('sine', 660, 660, 0.25, 0.2);
-        this.tone('sine', 990, 990, 0.35, 0.16, 0.08);
-        break;
       case 'starfall':
         this.tone('sine', 300, 1200, 0.4, 0.1);
         this.noise(0.4, 0.08, 3000, 'highpass');
@@ -128,7 +124,6 @@ export class Audio {
         this.tone('sine', 660, 880, 0.1, 0.14);
         this.tone('sine', 990, 990, 0.15, 0.12, 0.09);
         break;
-      case 'magnet': this.tone('sine', 300, 900, 0.2, 0.15); break;
       case 'pop': this.tone('square', 500, 900, 0.08, 0.15); break;
       case 'shard': this.tone('sine', 1200, 1800, 0.1, 0.15); break;
       case 'hit': this.tone('triangle', 280, 110, 0.10, 0.18); break;
