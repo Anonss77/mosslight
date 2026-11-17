@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="id">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Mosslight — a bright open-world survival</title>
+<title>Mosslight</title>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.min.js" } }
 </script>
@@ -48,15 +48,8 @@
   #bossTrack { height: 18px; background: rgba(0,0,0,0.55); border: 3px solid #FFD76A; border-radius: 6px; overflow: hidden; }
   #bossFill { height: 100%; background: linear-gradient(#FFD76A, #E94F62); width: 100%; transition: width 0.15s linear; }
 
-  #deck { position: absolute; left: 0; right: 0; bottom: 0; height: 190px; pointer-events: none;
-    background:
-      repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 8px, rgba(0,0,0,0.03) 8px 16px),
-      linear-gradient(to top, rgba(30,60,28,0.55) 0%, rgba(30,60,28,0.35) 55%, rgba(30,60,28,0.0) 100%);
-    border-top: 2px solid rgba(245,212,90,0.55);
-    box-shadow: inset 0 18px 30px rgba(0,0,0,0.25); }
-
-  #joystick { position: absolute; left: 40px; bottom: 44px; width: 112px; height: 112px; border-radius: 50%;
-    background: radial-gradient(circle at 50% 50%, #8A5A1E 0 30px, rgba(90,58,26,0.55) 30px 52px, rgba(90,58,26,0.25) 52px 100%);
+  #joystick { position: absolute; left: 40px; bottom: 120px; width: 112px; height: 112px; border-radius: 50%;
+    background: transparent;
     border: 4px solid rgba(255,255,255,0.65); box-shadow: 0 6px 16px rgba(0,0,0,0.6), inset 0 2px 8px rgba(255,255,255,0.15);
     pointer-events: auto; touch-action: none; }
   #joyThumb { position: absolute; left: 32px; top: 32px; width: 48px; height: 48px; border-radius: 50%;
@@ -64,7 +57,7 @@
     border: 2px solid rgba(255,255,255,0.8); box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
   .skill { position: absolute; border-radius: 50%; pointer-events: auto; cursor: pointer; overflow: hidden; box-sizing: border-box;
-    background: radial-gradient(circle at 35% 30%, #4A4A58 0%, #23232E 70%);
+    background: transparent;
     border: 3px solid #C9A227; box-shadow: 0 0 0 2px #5A3A1A, 0 4px 12px rgba(0,0,0,0.55); touch-action: none; }
   .skill .cd { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--cd, 0) * 100%); background: rgba(0,0,0,0.6); }
   .skill .cost { position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%); min-width: 20px; height: 16px; line-height: 16px; text-align: center;
@@ -75,11 +68,11 @@
   .skill.ready { animation: glow 0.8s infinite alternate; border-color: #FFD76A; }
 
   @keyframes glow { from { box-shadow: 0 0 6px #FFD76A; } to { box-shadow: 0 0 22px #FFD76A; } }
-  #skill-0 { right: 105px; bottom: 174px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #D8A93C 60%, #8A5A1E 100%); }
-  #skill-1 { right: 157px; bottom: 134px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #D8A93C 60%, #8A5A1E 100%); }
-  #skill-2 { right: 38px; bottom: 184px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FFF3C4 0%, #F5D45A 45%, #B8860B 100%); }
+  #skill-0 { right: 118px; bottom: 206px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #D8A93C 60%, #8A5A1E 100%); }
+  #skill-1 { right: 150px; bottom: 130px; width: 56px; height: 56px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #D8A93C 60%, #8A5A1E 100%); }
+  #skill-2 { right: 38px; bottom: 234px; width: 64px; height: 64px; background: radial-gradient(circle at 35% 30%, #FFF3C4 0%, #F5D45A 45%, #B8860B 100%); }
   .skill img { position: absolute; inset: 9px; width: calc(100% - 18px); height: calc(100% - 18px); }
-  #attackBtn { right: 32px; bottom: 28px; width: 76px; height: 76px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #E8A81A 55%, #B8860B 100%); border-width: 4px; }
+  #attackBtn { right: 32px; bottom: 120px; width: 76px; height: 76px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #E8A81A 55%, #B8860B 100%); border-width: 4px; }
   #attackBtn .lbl { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 10px; font-weight: bold; color: #4A2E00; text-shadow: none; }
   #muteBtn, #bagBtn, #camBtn { position: absolute; width: 56px; height: 56px; border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #FFF3C4, #E8C33C 60%, #B8860B); border: 3px solid #C9A227; cursor: pointer; pointer-events: auto; box-shadow: 0 0 0 2px #5A3A1A, 0 4px 12px rgba(0,0,0,0.55); }
@@ -89,8 +82,8 @@
   #muteBtn img, #camBtn img, #bagBtn img { width: 30px; height: 30px; }
   .ic { width: 24px; height: 24px; vertical-align: -5px; }
   .chip { display: inline-block; background: #F6E8C8; color: #3A2410; border: 2px solid #C9A227; border-radius: 999px; padding: 2px 10px; text-shadow: none; box-shadow: 0 2px 0 #5A3A1A; }
-  #bagBtn::after { content: 'BAG'; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 3px; font-size: 11px; font-weight: bold; color: #FFD76A; text-shadow: 1px 1px 0 #000; }
-  #denyText { position: absolute; right: 24px; bottom: 260px; font-size: 15px; font-weight: bold; color: #FF6B5E; text-align: right; }
+  #bagBtn::after { content: var(--baglbl, 'BAG'); position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 3px; font-size: 11px; font-weight: bold; color: #FFD76A; text-shadow: 1px 1px 0 #000; }
+  #denyText { position: absolute; right: 24px; bottom: 320px; font-size: 15px; font-weight: bold; color: #FF6B5E; text-align: right; }
   .skill.poor { filter: grayscale(0.7) brightness(0.6); }
   .skill.poor .cost { background: #D93A2E; }
   .skill.deny { animation: denyshake 0.3s; }
@@ -120,6 +113,11 @@
   .menuRow{display:flex;gap:8px}
   .orn img{width:26px;height:26px;margin:0 5px;filter:drop-shadow(0 2px 2px #0006)}
   .best{padding:6px 16px;font-size:15px}
+  #titlePanel{width:min(696px,92vw)}
+  #titlePanel .hero-card{width:150px}
+  #titlePanel .hero-card img{width:92px;height:92px}
+  #titlePanel h1{font-size:clamp(44px,9vmin,92px)}
+  .lang.sel{outline:4px solid #FFD76A}
   #offerRow,#shopRow{display:flex;gap:10px;justify-content:center;margin:6px 0;flex-wrap:wrap}
   .offer{display:block;width:128px;padding:6px;box-sizing:border-box;border:12px solid transparent;border-image:url(i/panel.png) 20 fill;background:#F6E8C8;border-radius:0}
   .offer .ic{display:block;width:30px;height:30px;margin:0 auto 2px}
@@ -143,7 +141,7 @@
     .panel p{font-size:14px}
     .offer{width:118px;padding:8px 6px}
     .offer.shop{width:104px}
-    #joystick{left:24px;bottom:32px;width:96px;height:96px}
+    #joystick{left:24px;bottom:100px;width:96px;height:96px}
     #joyThumb{left:28px;top:28px;width:40px;height:40px}
     .skill{width:48px!important;height:48px!important}
     #buildText{display:none}
@@ -181,7 +179,6 @@
       <div id="bossText">The Gloam Bell — 950 / 950</div>
       <div id="bossTrack"><div id="bossFill"></div></div>
     </div>
-    <div id="deck"></div>
     <div id="joystick"><div id="joyThumb"></div></div>
     <div class="skill" id="skill-0">
       <img src="i/bolt.png">
@@ -197,7 +194,7 @@
     </div>
     <div class="skill ready" id="attackBtn">
       <img src="i/sword.png">
-      <div class="key">J</div><div class="lbl">ATTACK</div>
+      <div class="key">J</div><div class="lbl" data-l="atk">ATTACK</div>
     </div>
     <div id="denyText"></div>
     <button id="muteBtn" title="Mute"><img class=ic src=i/audioOn.png></button>
@@ -209,63 +206,64 @@
     <h1>MOSSLIGHT</h1>
     <div class="orn"><img src=i/candle.png><img src=i/gem.png><img src=i/flame.png><img src=i/gem.png><img src=i/candle.png></div>
     <div id="heroRow">
-      <button class="offer hero-card sel" data-hero="neri"><img src="i/hero-neri.png"><b>Neri</b><span>Lantern Mage</span><em>Balanced</em></button>
-      <button class="offer hero-card" data-hero="aldric"><img src="i/hero-aldric.png"><b>Aldric</b><span>Knight</span><em>Tough</em></button>
-      <button class="offer hero-card" data-hero="lyra"><img src="i/hero-lyra.png"><b>Lyra</b><span>Ranger</span><em>Fast</em></button>
+      <button class="offer hero-card sel" data-hero="neri"><img src="i/hero-neri.png"><b>Neri</b><span data-l="roleMage">Lantern Mage</span><em data-l="tagBal">Balanced</em></button>
+      <button class="offer hero-card" data-hero="aldric"><img src="i/hero-aldric.png"><b>Aldric</b><span data-l="roleKnight">Knight</span><em data-l="tagTgh">Tough</em></button>
+      <button class="offer hero-card" data-hero="lyra"><img src="i/hero-lyra.png"><b>Lyra</b><span data-l="roleRanger">Ranger</span><em data-l="tagFst">Fast</em></button>
     </div>
     <div class="menu">
-      <button id="startBtn" class="plank">▶ START</button>
+      <button id="startBtn" class="plank" data-l="start">▶ START</button>
       <div class="menuRow">
-        <button id="helpBtn" class="plank">? How to play</button>
+        <button id="helpBtn" class="plank" data-l="help">? How to play</button>
         <button id="titleMuteBtn" class="plank">♪ Sound: On</button>
       </div>
+      <div class="menuRow"><button id="langIdBtn" class="plank lang">ID</button><button id="langEnBtn" class="plank lang">EN</button></div>
     </div>
     <div class="plank best" id="bestTally">Best: 0</div>
   </div>
 
   <div id="helpPanel" class="panel hidden">
-    <h2 class="plank sign">How to play</h2>
-    <p>Move: WASD / arrows / joystick · Attack: J / Space (tap fast, no cooldown!) · Skills: Q E R · Bag: B · Drag: rotate camera</p>
-    <p>Help <b id="helpHero">Neri</b> survive 8 waves and beat the <b>Gloam Bell</b>. Attacks are automatic — tap <b>ATTACK</b> for extra bolts. Each hero: 2 skills + 1 ultimate (R, 100 energy).</p>
-    <button id="helpCloseBtn">✕ Close</button>
+    <h2 class="plank sign" data-l="helpT">How to play</h2>
+    <p data-l="helpP1">Move: WASD / arrows / joystick · Attack: J / Space (tap fast, no cooldown!) · Skills: Q E R · Bag: B · Drag: rotate camera</p>
+    <p data-l="helpP2">Help Neri survive 8 waves and beat the Gloam Bell. Attacks are automatic — tap ATTACK for extra bolts. Each hero: 2 skills + 1 ultimate (R, 100 energy).</p>
+    <button id="helpCloseBtn" data-l="helpX">✕ Close</button>
   </div>
 
   <div id="interPanel" class="panel hidden">
-    <h2 class="plank sign"><img class=ic src=i/star.png> WAVE CLEARED! <img class=ic src=i/star.png></h2>
-    <p>Next wave in 20s!</p>
+    <h2 class="plank sign"><img class=ic src=i/star.png><span data-l="cleared">WAVE CLEARED!</span><img class=ic src=i/star.png></h2>
+    <p data-l="nextW">Next wave in 20s!</p>
     <div id="offerRow"></div>
     <p id="shopCoins">0 coins — shop at wave break!</p>
-    <p class="plank sign"><img class=ic src=i/shoppingCart.png> TOKO — ketuk untuk BELI</p>
+    <p class="plank sign"><img class=ic src=i/shoppingCart.png><span data-l="shopT">TOKO — ketuk untuk BELI</span></p>
     <div id="shopRow"></div>
   </div>
 
   <div id="pausePanel" class="panel hidden">
-    <h2 class="plank sign"><img class=ic src=i/pause.png> PAUSED</h2>
-    <button id="resumeBtn">▶ Resume</button><br>
-    <button id="restartBtn" class="ghost">↻ Restart run</button>
-    <button id="quitBtn" class="ghost"><img class=ic src=i/home.png> Title</button>
+    <h2 class="plank sign"><img class=ic src=i/pause.png><span data-l="paused">PAUSED</span></h2>
+    <button id="resumeBtn" data-l="resume">▶ Resume</button><br>
+    <button id="restartBtn" class="ghost" data-l="restart">↻ Restart run</button>
+    <button id="quitBtn" class="ghost"><img class=ic src=i/home.png><span data-l="toTitle">Title</span></button>
   </div>
 
   <div id="bagPanel" class="panel hidden">
-    <h2 class="plank sign"><img class=ic src=i/bag.png> TAS — ketuk item untuk PAKAI</h2>
+    <h2 class="plank sign"><img class=ic src=i/bag.png><span data-l="bagT">TAS — ketuk item untuk PAKAI</span></h2>
     <p id="bagCoins">0 &nbsp; 0</p>
     <div id="offerRow">
-      <button class="offer bag-item" id="bag-heart"><b><img class=ic src=i/heart.png> Heart</b><span>Medicine: heal +30 HP</span><em id="bagHeartN">x0</em></button>
-      <button class="offer bag-item" id="bag-bomb"><b><img class=ic src=i/bomb.png> Bomb</b><span>90 dmg blast, nearby enemies (280px)</span><em id="bagBombN">x0</em></button>
-      <button class="offer bag-item" id="bag-magnet"><b><img class=ic src=i/magnet.png> Magnet</b><span>Pull ALL items to you</span><em id="bagMagnetN">x0</em></button>
+      <button class="offer bag-item" id="bag-heart"><img class=ic src=i/heart.png><b data-l="itHeart">Heart</b><span data-l="itHeartD">Medicine: heal +30 HP</span><em id="bagHeartN">x0</em></button>
+      <button class="offer bag-item" id="bag-bomb"><img class=ic src=i/bomb.png><b data-l="itBomb">Bomb</b><span data-l="itBombD">90 dmg blast, nearby enemies (280px)</span><em id="bagBombN">x0</em></button>
+      <button class="offer bag-item" id="bag-magnet"><img class=ic src=i/magnet.png><b data-l="itMag">Magnet</b><span data-l="itMagD">Pull ALL items to you</span><em id="bagMagnetN">x0</em></button>
     </div>
-    <p style="font-size:13px">Tap an item to use it. Game pauses while open.</p>
-    <button id="bagCloseBtn">✕ Close (B)</button>
+    <p style="font-size:13px" data-l="bagH">Tap an item to use it. Game pauses while open.</p>
+    <button id="bagCloseBtn" data-l="bagX">✕ Close (B)</button>
   </div>
 
   <div id="resultPanel" class="panel hidden">
     <h1 id="resultTitle">VICTORY</h1>
     <p id="resultBody"></p>
-    <button id="againBtn">↻ Play again</button>
-    <button id="titleBtn" class="ghost"><img class=ic src=i/home.png> Title</button>
+    <button id="againBtn" data-l="again">↻ Play again</button>
+    <button id="titleBtn" class="ghost"><img class=ic src=i/home.png><span data-l="toTitle">Title</span></button>
   </div>
 </div>
 <script type="module" src="./src/main.js"></script>
-<div id="rotateOverlay"><img class="rotPhone" src=i/phone.png><b>Rotate your device to play</b><span>Landscape only</span></div>
+<div id="rotateOverlay"><img class="rotPhone" src=i/phone.png><b data-l="rotateT">Rotate your device to play</b><span data-l="rotateS">Landscape only</span></div>
 </body>
 </html>

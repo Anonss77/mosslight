@@ -1,6 +1,7 @@
 
 import { Game, STEP, ic } from './game.js';
 import { HEROES } from './config.js';
+import { t, lang, setLangStored } from './i18n.js';
 import { createWorld } from './world.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
@@ -12,6 +13,8 @@ window.addEventListener('resize', fitStage);
 window.addEventListener('orientationchange', fitStage);
 
 const params = new URLSearchParams(location.search);
+const langParam = params.get('lang');
+if (langParam === 'en' || langParam === 'id') setLangStored(langParam);
 const seed = parseInt(params.get('seed') || '20261116', 10);
 const shot = params.get('shot');
 const heroParam = params.get('hero');
@@ -61,11 +64,32 @@ function syncSkillButtons() {
     if (!btn) continue;
     const s = H.skills[i];
     btn.querySelector('img').src = 'i/' + s.ic + '.png';
-    btn.title = s.name;
+    btn.title = t(s.name);
   }
-  const hh = $('helpHero');
-  if (hh) hh.textContent = H.name;
 }
+
+function applyLang() {
+  for (const el of document.querySelectorAll('[data-l]')) {
+    if (el.dataset.l !== 'helpP2') el.textContent = t(el.dataset.l);
+  }
+  const hp2 = document.querySelector('[data-l="helpP2"]');
+  if (hp2) hp2.innerHTML = t('helpP2').replace('{h}', HEROES[game.heroId].name);
+  document.documentElement.lang = lang === 'id' ? 'id' : 'en';
+  document.documentElement.style.setProperty('--baglbl', "'" + t('bagB') + "'");
+  $('langIdBtn').classList.toggle('sel', lang === 'id');
+  $('langEnBtn').classList.toggle('sel', lang === 'en');
+}
+function setLang(l) {
+  setLangStored(l);
+  applyLang();
+  syncMute();
+  syncSkillButtons();
+  if (game.state === 'intermission') game.showIntermission();
+  if (game.done) game.showResult();
+  game.updateHUD();
+}
+$('langIdBtn').addEventListener('click', () => setLang('id'));
+$('langEnBtn').addEventListener('click', () => setLang('en'));
 
 function selectHero(id) {
   if (!HEROES[id] || game.state !== 'title') return;
@@ -76,6 +100,7 @@ function selectHero(id) {
     el.classList.toggle('sel', el.dataset.hero === id);
   }
   syncSkillButtons();
+  applyLang();
 }
 
 for (const el of document.querySelectorAll('.hero-card')) {
@@ -83,7 +108,7 @@ for (const el of document.querySelectorAll('.hero-card')) {
 }
 try {
   const b = +localStorage.getItem('mosslight-best') || 0;
-  if (b) $('bestTally').textContent = 'Best: ' + b;
+  $('bestTally').textContent = t('best') + b;
 } catch (e) {}
 
 $('startBtn').addEventListener('click', () => {
@@ -101,7 +126,7 @@ $('titleBtn').addEventListener('click', () => {
 function syncMute() {
   const m = audio.muted;
   $('muteBtn').innerHTML = ic(m ? 'audioOff' : 'audioOn');
-  $('titleMuteBtn').textContent = m ? '♪ Sound: Off' : '♪ Sound: On';
+  $('titleMuteBtn').textContent = m ? t('sndOff') : t('sndOn');
 }
 $('muteBtn').addEventListener('click', () => { audio.toggleMute(); syncMute(); });
 $('titleMuteBtn').addEventListener('click', () => { audio.toggleMute(); syncMute(); });
@@ -157,6 +182,8 @@ for (let i = 0; i < 3; i++) {
 }
 input.bindSkillButton($('attackBtn'), 'attack');
 syncSkillButtons();
+applyLang();
+syncMute();
 
 if (autotest) {
 

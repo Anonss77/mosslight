@@ -2,9 +2,6 @@
 export const TILE = 16;
 export const FIELD_W = 2400;
 export const FIELD_H = 1800;
-export const WORLD_W = FIELD_W;
-export const WORLD_H = FIELD_H;
-export const UNIT = TILE;
 
 export const COS05 = 0.8775825618903728, SIN05 = 0.479425538604203;
 
@@ -37,8 +34,6 @@ export const WAVES = [
   { area: 2, groups: 8, perGroup: 8, hpMul: 2.1, spMul: 1.15 },
   { area: 2, groups: 4, perGroup: 5, hpMul: 1.8, spMul: 1.15, boss: true },
 ];
-export const AREA_NAMES = ['Bloomroot Warrens', 'Cinderglass Works', 'Moonmilk Vault'];
-
 export const PLAYER = {
   maxHp: 100,
   speed: 180,
@@ -59,27 +54,27 @@ export const HEROES = {
     cast: 'Spellcast_Shoot', castLong: 'Spellcast_Raise',
     hp: 100, speed: 180, boltDmg: 5, boltRange: 190,
     skills: [
-      { name: 'Bolt Burst', fx: 'fan', ic: 'bolt', cost: 20, cd: 4, n: 3, dmg: 6 },
-      { name: 'Ember Flame', fx: 'patch', ic: 'flame', cost: 30, cd: 7, range: 160, r: 72, dmg: 12, tick: 8, tickTime: 2 },
-      { name: 'Starfall', fx: 'rain', ic: 'star', cost: 100, cd: 30, windup: 0.6, range: 135, dmg: 90, kb: 90, n: 16, col: '#ffd76a' },
+      { name: 'skBolt', fx: 'fan', ic: 'bolt', cost: 20, cd: 4, n: 3, dmg: 6 },
+      { name: 'skEmber', fx: 'patch', ic: 'flame', cost: 30, cd: 7, range: 160, r: 72, dmg: 12, tick: 8, tickTime: 2 },
+      { name: 'skStar', fx: 'rain', ic: 'star', cost: 100, cd: 30, windup: 0.6, range: 135, dmg: 90, kb: 90, n: 16, col: '#ffd76a' },
     ] },
   aldric: { name: 'Aldric', file: 'aldric.glb', prefix: 'Knight_',
     hide: ['1H_Sword_Offhand', '2H_Sword', 'Badge_Shield', 'Rectangle_Shield', 'Round_Shield', 'Spike_Shield'],
     cast: '1H_Melee_Attack_Slice_Horizontal', castLong: '2H_Melee_Attack_Spin',
     hp: 130, speed: 165, boltDmg: 6, boltRange: 150,
     skills: [
-      { name: 'Sword Arc', fx: 'arc', ic: 'sword', cost: 20, cd: 4, range: 70, dmg: 30, kb: 0 },
-      { name: 'Shield Charge', fx: 'charge', ic: 'shield', cost: 30, cd: 7, range: 70, dmg: 22, lunge: 90, kb: 40 },
-      { name: 'Whirlwind', fx: 'arc', ic: 'whirl', cost: 100, cd: 30, range: 150, dmg: 70, kb: 120 },
+      { name: 'skArc', fx: 'arc', ic: 'sword', cost: 20, cd: 4, range: 70, dmg: 30, kb: 0 },
+      { name: 'skChg', fx: 'charge', ic: 'shield', cost: 30, cd: 7, range: 70, dmg: 22, lunge: 90, kb: 40 },
+      { name: 'skWhirl', fx: 'arc', ic: 'whirl', cost: 100, cd: 30, range: 150, dmg: 70, kb: 120 },
     ] },
   lyra: { name: 'Lyra', file: 'lyra.glb', prefix: 'Rogue_',
     hide: ['1H_Crossbow', 'Knife', 'Knife_Offhand', 'Throwable'],
     cast: '2H_Ranged_Shoot',
     hp: 105, speed: 195, boltDmg: 6, boltRange: 230,
     skills: [
-      { name: 'Arrow Volley', fx: 'fan', ic: 'arrows', cost: 20, cd: 4, n: 5, dmg: 8 },
-      { name: 'Frost Arrow', fx: 'frostshot', ic: 'frost', cost: 30, cd: 7, dmg: 14, freeze: 2.5 },
-      { name: 'Moonfall', fx: 'rain', ic: 'moon', cost: 100, cd: 30, windup: 0.6, range: 135, dmg: 100, kb: 60, n: 20, col: '#b9a9f0' },
+      { name: 'skVol', fx: 'fan', ic: 'arrows', cost: 20, cd: 4, n: 5, dmg: 8 },
+      { name: 'skFrost', fx: 'frostshot', ic: 'frost', cost: 30, cd: 7, dmg: 14, freeze: 2.5 },
+      { name: 'skMoon', fx: 'rain', ic: 'moon', cost: 100, cd: 30, windup: 0.6, range: 135, dmg: 100, kb: 60, n: 20, col: '#b9a9f0' },
     ] },
 };
 
@@ -113,13 +108,9 @@ export const ENEMIES = {
   },
 };
 
-export const TINKET_FROM_WAVE = 2;
 export const TINKET_MAX_PER_GROUP = 2;
-export const BRAMBLER_FROM_WAVE = 3;
 export const BRAMBLER_MAX_PER_GROUP_EARLY = 1;
 export const BRAMBLER_MAX_PER_GROUP_LATE = 2;
-export const WISP_FROM_WAVE = 2;
-export const BULWARK_FROM_WAVE = 4;
 
 export const BOSS = {
   name: 'The Gloam Bell',
@@ -173,18 +164,18 @@ export const LOOT = {
   statueTime: 1.2,
 };
 
-export const UPGRADES = [  { id: 'wick', name: 'Bright Wick', cost: 12, cur: 'coin', max: 2, desc: 'Bolt +3 damage', ic: 'candle' },
-  { id: 'hands', name: 'Quick Hands', cost: 10, cur: 'coin', max: 2, desc: 'Bolt interval -0.08s', ic: 'bolt' },
-  { id: 'thread', name: 'Long Thread', cost: 10, cur: 'coin', max: 2, desc: 'Bolt range +35px', ic: 'thread' },
-  { id: 'cape', name: 'Padded Cape', cost: 14, cur: 'coin', max: 2, desc: '+20 max HP, heal 20', ic: 'cape' },
-  { id: 'charm', name: 'Shard Charm', cost: 2, cur: 'shard', max: 1, desc: 'All skills +10 damage', ic: 'gem' },
+export const UPGRADES = [  { id: 'wick', name: 'upWick', cost: 12, cur: 'coin', max: 2, desc: 'upWickD', ic: 'candle' },
+  { id: 'hands', name: 'upHands', cost: 10, cur: 'coin', max: 2, desc: 'upHandsD', ic: 'bolt' },
+  { id: 'thread', name: 'upThread', cost: 10, cur: 'coin', max: 2, desc: 'upThreadD', ic: 'thread' },
+  { id: 'cape', name: 'upCape', cost: 14, cur: 'coin', max: 2, desc: 'upCapeD', ic: 'cape' },
+  { id: 'charm', name: 'upCharm', cost: 2, cur: 'shard', max: 1, desc: 'upCharmD', ic: 'gem' },
 ];
 
 export const SHOP = [
-  { id: 'shopHeart', name: 'Heart', ic: 'heart', desc: 'Heal +30 HP', cost: 60 },
-  { id: 'shopEnergy', name: 'Energy', ic: 'bolt', desc: 'Restore +50 skill energy', cost: 45 },
-  { id: 'shopBomb', name: 'Bomb', ic: 'bomb', desc: '+1 bomb to bag', cost: 35 },
-  { id: 'shopMagnet', name: 'Magnet', ic: 'magnet', desc: '+1 magnet to bag', cost: 30 },
+  { id: 'shopHeart', name: 'itHeart', ic: 'heart', desc: 'shHeartD', cost: 60 },
+  { id: 'shopEnergy', name: 'shEnergy', ic: 'bolt', desc: 'shEnergyD', cost: 45 },
+  { id: 'shopBomb', name: 'itBomb', ic: 'bomb', desc: 'shBombD', cost: 35 },
+  { id: 'shopMagnet', name: 'itMag', ic: 'magnet', desc: 'shMagD', cost: 30 },
 ];
 
 export const FEEL = {
@@ -201,7 +192,6 @@ export const FEEL = {
   bossDeathParticles: 60,
   particleLife: 0.6,
   lowHp: 25,
-  lowHpPulseHz: 2,
   lowHpWarnEvery: 5,
 };
 
@@ -239,14 +229,4 @@ export const CAM = {
   bossHeight: 4.6,
   maxPitch: 0.35,
   titleShiftX: 9,
-};
-
-export const HUD = {
-  hpW: 280, hpH: 26,
-  energyW: 220, energyH: 14,
-  waveFont: 30, timerFont: 18, areaFont: 14,
-  bossBarW: 560, bossBarH: 18,
-  minimap: 140,
-  joyOuter: 112, joyThumb: 48, joyTravel: 31,
-  skillD: 64, starD: 72, minTouch: 52,
 };
