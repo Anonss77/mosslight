@@ -135,7 +135,7 @@ const NP = (a) => a.map(([f, s]) => ['nature/' + f, s]);
 const PROP_GLB = [
 NP([['tree_oak.glb', 2.2], ['tree_pineTallA.glb', 2], ['tree_detailed.glb', 1.8], ['tree_pineRoundA.glb', 1.9], ['rock_largeA.glb', 1.6], ['rock_smallA.glb', 1.2], ['flower_redA.glb', 1.4], ['flower_yellowA.glb', 1.4], ['flower_purpleA.glb', 1.4], ['mushroom_red.glb', 1.6], ['mushroom_redTall.glb', 1.6], ['log.glb', 1.4], ['stump_round.glb', 1.3], ['plant_bush.glb', 1.5], ['grass_large.glb', 1.6]]),
 NP([['campfire_stones.glb', 1.8], ['rock_largeA.glb', 1.6], ['rock_smallA.glb', 1.2], ['log.glb', 1.4], ['stump_round.glb', 1.3], ['tree_pineTallA.glb', 1.6]]),
-[['crystal.glb', 0.55], ['crystal.glb', 0.4], ['nature/rock_largeA.glb', 1.6], ['nature/rock_smallA.glb', 1.2]],
+[['crystal.glb', 0.3], ['crystal.glb', 0.22], ['nature/rock_largeA.glb', 1.6], ['nature/rock_smallA.glb', 1.2]],
 ];
 const glbCache = {}, glbWait = {};
 function glbGet(f) {
@@ -172,7 +172,7 @@ glbPut('town/pillar-stone.glb', FW * 0.22 - 5, FH * 0.3 + 4, 0, 1.8);
 glbPut('town/pillar-stone.glb', FW * 0.22 + 5, FH * 0.3 + 4, 0, 1.8);
 } else if (area === 2) {
 glbPut('cave/gate-rock.glb', FW / 2, 5, 0, 2.4);
-glbPut('crystal.glb', FW * 0.75, FH * 0.65, 0.8, 0.7);
+glbPut('crystal.glb', FW * 0.75, FH * 0.65, 0.8, 0.4);
 }
 
 const tuftGeo = new THREE.ConeGeometry(0.13, 0.85, 5);
