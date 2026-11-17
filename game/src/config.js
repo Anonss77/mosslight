@@ -152,18 +152,18 @@ export const LOOT = {
   statueTime: 1.2,
 };
 
-export const UPGRADES = [  { id: 'wick', name: 'Bright Wick', cost: 12, cur: 'coin', max: 2, desc: 'Bolt +3 damage', ic: '🕯️' },
-  { id: 'hands', name: 'Quick Hands', cost: 10, cur: 'coin', max: 2, desc: 'Bolt interval -0.08s', ic: '⚡' },
-  { id: 'thread', name: 'Long Thread', cost: 10, cur: 'coin', max: 2, desc: 'Bolt range +35px', ic: '🧵' },
-  { id: 'cape', name: 'Padded Cape', cost: 14, cur: 'coin', max: 2, desc: '+20 max HP, heal 20', ic: '🧥' },
-  { id: 'charm', name: 'Shard Charm', cost: 2, cur: 'shard', max: 1, desc: 'Crescent +10, Ember tick +3, Starfall +15', ic: '💎' },
+export const UPGRADES = [  { id: 'wick', name: 'Bright Wick', cost: 12, cur: 'coin', max: 2, desc: 'Bolt +3 damage', ic: 'candle' },
+  { id: 'hands', name: 'Quick Hands', cost: 10, cur: 'coin', max: 2, desc: 'Bolt interval -0.08s', ic: 'bolt' },
+  { id: 'thread', name: 'Long Thread', cost: 10, cur: 'coin', max: 2, desc: 'Bolt range +35px', ic: 'thread' },
+  { id: 'cape', name: 'Padded Cape', cost: 14, cur: 'coin', max: 2, desc: '+20 max HP, heal 20', ic: 'cape' },
+  { id: 'charm', name: 'Shard Charm', cost: 2, cur: 'shard', max: 1, desc: 'Crescent +10, Ember tick +3, Starfall +15', ic: 'gem' },
 ];
 
 export const SHOP = [
-  { id: 'shopHeart', name: '❤️ Heart', desc: 'Heal +30 HP', cost: 60 },
-  { id: 'shopEnergy', name: '⚡ Energy', desc: 'Restore +50 skill energy', cost: 45 },
-  { id: 'shopBomb', name: '💣 Bomb', desc: '+1 bomb to bag', cost: 35 },
-  { id: 'shopMagnet', name: '🧲 Magnet', desc: '+1 magnet to bag', cost: 30 },
+  { id: 'shopHeart', name: 'Heart', ic: 'heart', desc: 'Heal +30 HP', cost: 60 },
+  { id: 'shopEnergy', name: 'Energy', ic: 'bolt', desc: 'Restore +50 skill energy', cost: 45 },
+  { id: 'shopBomb', name: 'Bomb', ic: 'bomb', desc: '+1 bomb to bag', cost: 35 },
+  { id: 'shopMagnet', name: 'Magnet', ic: 'magnet', desc: '+1 magnet to bag', cost: 30 },
 ];
 
 export const FEEL = {

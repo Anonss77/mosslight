@@ -1,5 +1,5 @@
 
-import { Game, STEP } from './game.js';
+import { Game, STEP, ic } from './game.js';
 import { createWorld } from './world.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
@@ -38,9 +38,6 @@ function showTitle() {
   titlePanel.classList.remove('hidden');
   hud.classList.add('hidden');
   pausePanel.classList.add('hidden');
-  const best = Number(localStorage.getItem('mosslight-best') || 0);
-  const bestEl = $('bestScore');
-  if (bestEl) bestEl.textContent = `Best: ${best} pts`;
 }
 
 function showHud() {
@@ -56,8 +53,7 @@ function startRunWithSeed(s) {
 }
 
 $('startBtn').addEventListener('click', () => {
-  const typed = parseInt(($('seedInput').value || '').trim(), 10);
-  startRunWithSeed(Number.isFinite(typed) ? typed : game.seed);
+  startRunWithSeed(game.seed);
   audio.unlock();
   if(matchMedia('(pointer:coarse)').matches){try{document.documentElement.requestFullscreen().catch(()=>{}),screen.orientation.lock('landscape').catch(()=>{})}catch(e){}}
 });
@@ -70,7 +66,7 @@ $('titleBtn').addEventListener('click', () => {
 });
 $('muteBtn').addEventListener('click', () => {
   const muted = audio.toggleMute();
-  $('muteBtn').textContent = muted ? '🔇' : '🔊';
+  $('muteBtn').innerHTML = ic(muted ? 'audioOff' : 'audioOn');
 });
 
 let paused = false;
@@ -82,7 +78,7 @@ function setPaused(p) {
 
 function renderBag() {
   const b = game.bag || { heart: 0, bomb: 0, magnet: 0 };
-  $('bagCoins').textContent = `🪙 ${game.coins}   💎 ${game.shards}`;
+  $('bagCoins').innerHTML = `${ic('coin')} ${game.coins} &nbsp; ${ic('gem')} ${game.shards}`;
   for (const k of ['heart', 'bomb', 'magnet']) {
     document.getElementById(`bag${k[0].toUpperCase() + k.slice(1)}N`).textContent = `x${b[k]}`;
     document.getElementById(`bag-${k}`).classList.toggle('empty', b[k] <= 0);
@@ -96,6 +92,8 @@ function setBag(open) {
 }
 $('bagBtn').addEventListener('click', () => { if (game.state === 'playing' || bagOpen) setBag(!bagOpen); });
 $('bagCloseBtn').addEventListener('click', () => setBag(false));
+$('helpBtn').onclick = () => $('helpPanel').classList.toggle('hidden');
+$('helpCloseBtn').onclick = () => $('helpPanel').classList.toggle('hidden');
 for (const k of ['heart', 'bomb', 'magnet']) {
   document.getElementById(`bag-${k}`).addEventListener('click', () => { if (game.useBagItem(k)) renderBag(); });
 }

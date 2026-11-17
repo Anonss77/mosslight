@@ -13,7 +13,7 @@
   body { display: flex; align-items: center; justify-content: center;
     background: radial-gradient(ellipse at 50% 42%, #8fd97a 0%, #4a9a5e 45%, #2f7d5c 100%); }
   #rotateOverlay{display:none;position:fixed;inset:0;z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:linear-gradient(#7EC8F2,#6FBF7A 70%);color:#fff;text-align:center;text-shadow:2px 2px 0 #0006}
-  #rotateOverlay .rotPhone{font-size:64px;animation:rot 1.6s ease-in-out infinite}
+  #rotateOverlay .rotPhone{width:64px;height:64px;animation:rot 1.6s ease-in-out infinite}
   @keyframes rot{50%{transform:rotate(90deg)}}
   #rotateOverlay b{font-size:24px}
   @media (pointer:coarse) and (orientation:portrait){#rotateOverlay{display:flex}}
@@ -23,7 +23,7 @@
 
   #hud { position: absolute; inset: 0; pointer-events: none; font-family: monospace; color: #fff;
     text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000, -1px -1px 0 #000; }
-  .bar { position: absolute; background: rgba(0,0,0,0.55); border: 2px solid rgba(255,255,255,0.85); border-radius: 6px; overflow: hidden; }
+  .bar { position: absolute; background: #2A1A0A; border: 3px solid #C9A227; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 2px #5A3A1A, 0 2px 8px #0009; }
   .bar > div { height: 100%; transition: width 0.12s linear; }
   #hpBar { left: 24px; top: 16px; width: 280px; height: 26px; }
   #hpFill { background: linear-gradient(#FF6B5E, #D93A2E); width: 100%; }
@@ -40,7 +40,7 @@
   #fightText { position: absolute; left: 24px; top: 72px; font-size: 16px; font-weight: bold; }
   #nextText { position: absolute; left: 0; right: 0; top: 96px; text-align: center; font-size: 14px; opacity: 0.9; }
   #buildText { position: absolute; left: 24px; top: 96px; width: 280px; font-size: 13px; opacity: 0.9; }
-  #minimap { position: absolute; right: 24px; top: 52px; width: 140px; height: 140px; border: 3px solid rgba(255,255,255,0.85); border-radius: 50%; background: rgba(0,0,0,0.35); }
+  #minimap { position: absolute; right: 24px; top: 52px; width: 140px; height: 140px; border: 4px solid #C9A227; border-radius: 50%; background: rgba(0,0,0,0.35); box-shadow: 0 0 0 2px #5A3A1A, 0 0 14px #FFD76A55; }
   #scoreText { position: absolute; right: 24px; top: 264px; font-size: 16px; font-weight: bold; text-align: right; }
   #toastText { position: absolute; left: 0; right: 0; top: 122px; text-align: center; font-size: 15px; font-weight: bold; color: #FFE9A8; }
   #bossWrap { position: absolute; left: 50%; top: 104px; transform: translateX(-50%); width: min(560px, 92vw); text-align: center; }
@@ -51,21 +51,21 @@
   #deck { position: absolute; left: 0; right: 0; bottom: 0; height: 190px; pointer-events: none;
     background:
       repeating-linear-gradient(45deg, rgba(255,255,255,0.03) 0 8px, rgba(0,0,0,0.03) 8px 16px),
-      linear-gradient(to top, rgba(8,24,18,0.85) 0%, rgba(8,24,18,0.55) 55%, rgba(8,24,18,0.0) 100%);
+      linear-gradient(to top, rgba(30,60,28,0.55) 0%, rgba(30,60,28,0.35) 55%, rgba(30,60,28,0.0) 100%);
     border-top: 2px solid rgba(245,212,90,0.55);
     box-shadow: inset 0 18px 30px rgba(0,0,0,0.25); }
 
   #joystick { position: absolute; left: 40px; bottom: 44px; width: 112px; height: 112px; border-radius: 50%;
-    background: radial-gradient(circle at 50% 50%, #0a0f0c 0 30px, rgba(10, 20, 14, 0.55) 30px 52px, rgba(10, 20, 14, 0.25) 52px 100%);
+    background: radial-gradient(circle at 50% 50%, #8A5A1E 0 30px, rgba(90,58,26,0.55) 30px 52px, rgba(90,58,26,0.25) 52px 100%);
     border: 4px solid rgba(255,255,255,0.65); box-shadow: 0 6px 16px rgba(0,0,0,0.6), inset 0 2px 8px rgba(255,255,255,0.15);
     pointer-events: auto; touch-action: none; }
   #joyThumb { position: absolute; left: 32px; top: 32px; width: 48px; height: 48px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 28%, #E8F2FF 0%, #B9D9FF 25%, #4A7FD8 60%, #234F8A 100%);
+    background: radial-gradient(circle at 35% 28%, #FFF3C4 0%, #F5D45A 25%, #C9A227 60%, #8A5A1E 100%);
     border: 2px solid rgba(255,255,255,0.8); box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
 
   .skill { position: absolute; border-radius: 50%; pointer-events: auto; cursor: pointer; overflow: hidden;
     background: radial-gradient(circle at 35% 30%, #4A4A58 0%, #23232E 70%);
-    border: 3px solid rgba(255,255,255,0.75); box-shadow: 0 4px 12px rgba(0,0,0,0.55); touch-action: none; }
+    border: 3px solid #C9A227; box-shadow: 0 0 0 2px #5A3A1A, 0 4px 12px rgba(0,0,0,0.55); touch-action: none; }
   .skill svg { position: absolute; inset: 12px; width: calc(100% - 24px); height: calc(100% - 24px); }
   .skill .cd { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--cd, 0) * 100%); background: rgba(0,0,0,0.6); }
   .skill .cost { position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%); min-width: 20px; height: 16px; line-height: 16px; text-align: center;
@@ -84,10 +84,13 @@
   #attackBtn { right: 32px; bottom: 28px; width: 76px; height: 76px; background: radial-gradient(circle at 35% 30%, #FFE9A8 0%, #E8A81A 55%, #B8860B 100%); border-width: 4px; }
   #attackBtn .lbl { position: absolute; left: 0; right: 0; bottom: 4px; text-align: center; font-size: 10px; font-weight: bold; color: #4A2E00; text-shadow: none; }
   #muteBtn, #bagBtn, #camBtn { position: absolute; width: 56px; height: 56px; border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #3a3a48, #1c1c26); color: #fff; border: 3px solid rgba(255,255,255,0.85); font-size: 26px; cursor: pointer; pointer-events: auto; box-shadow: 0 4px 12px rgba(0,0,0,0.55); }
-  #muteBtn { top: 204px; right: 152px; width: 48px; height: 48px; font-size: 22px; }
+    background: radial-gradient(circle at 35% 30%, #FFF3C4, #E8C33C 60%, #B8860B); border: 3px solid #C9A227; cursor: pointer; pointer-events: auto; box-shadow: 0 0 0 2px #5A3A1A, 0 4px 12px rgba(0,0,0,0.55); }
+  #muteBtn { top: 204px; right: 152px; width: 48px; height: 48px; }
   #camBtn { top: 200px; right: 88px; }
-  #bagBtn { top: 200px; right: 24px; background: radial-gradient(circle at 35% 30%, #FFE9A8, #E8A81A); }
+  #bagBtn { top: 200px; right: 24px; }
+  #muteBtn img, #camBtn img, #bagBtn img { width: 30px; height: 30px; }
+  .ic { width: 24px; height: 24px; vertical-align: -5px; }
+  .chip { display: inline-block; background: #F6E8C8; color: #3A2410; border: 2px solid #C9A227; border-radius: 999px; padding: 2px 10px; text-shadow: none; box-shadow: 0 2px 0 #5A3A1A; }
   #bagBtn::after { content: 'BAG'; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 3px; font-size: 11px; font-weight: bold; color: #FFD76A; text-shadow: 1px 1px 0 #000; }
   #denyText { position: absolute; right: 24px; bottom: 260px; font-size: 15px; font-weight: bold; color: #FF6B5E; text-align: right; }
   .skill.poor { filter: grayscale(0.7) brightness(0.6); }
@@ -97,52 +100,30 @@
   #bagPanel { width: min(620px, 94vw); }
   .bag-item.empty { opacity: 0.45; }
 
-  .panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:94vw;max-height:92vh;overflow-y:auto;scrollbar-width:none;padding:4px 10px 14px;font-family:'Trebuchet MS','Segoe UI',sans-serif;color:#fff;text-shadow:2px 2px 0 #0008,-1px -1px 0 #0006}
+  .panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:94vw;max-height:92vh;overflow-y:auto;scrollbar-width:none;padding:6px 22px 18px;font-family:'Trebuchet MS','Segoe UI',sans-serif;color:#3A2410;text-shadow:0 1px 0 #FFF8;border:22px solid transparent;border-image:url(i/panel.png) 20 fill;background:#F6E8C8}
   #stage:has(.panel:not(.hidden)) :is(#waveText,#timerText,#areaText,#nextText){display:none}
   #interPanel{width:760px}
-  .panel h1{margin:0 0 2px;font-size:clamp(34px,8vmin,76px);font-weight:900;letter-spacing:5px;transform:rotate(-2deg);background:linear-gradient(#EAF7C8,#A8D97A 42%,#6FA844 70%,#4A7A2E);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 4px 0 #2E4A1E) drop-shadow(0 0 26px #FD6A8C)}
-  .panel h1::before{content:'🏮';display:block;font-size:30px}
-  .panel .tagline{font-size:clamp(15px,3vmin,24px);font-weight:900;letter-spacing:2px;color:#FFE9A8;margin:0 0 8px}
+  .panel h1{margin:0 0 2px;font-size:clamp(34px,8vmin,76px);font-weight:900;letter-spacing:5px;transform:rotate(-2deg);background:linear-gradient(#FFF8DC,#FFE9A8 40%,#F5D45A 62%,#B8860B);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #5A3A1A) drop-shadow(0 0 16px #FFE9A8)}
   .panel p{font-size:16px;line-height:1.5;margin:8px 0}
-  .panel p b{color:#FFE9A8}
-  .plank,.panel button,.tile,.offer,.board{display:inline-block;font-family:'Trebuchet MS','Segoe UI',sans-serif;font-weight:900;color:#3A2410;background-color:#E3B96A;background-image:repeating-linear-gradient(93deg,#5A320A26 0 2px,transparent 2px 9px);border:3px solid #6B4423;border-bottom:6px solid #4A2E12;border-radius:10px;box-shadow:0 6px 0 #0004,0 0 18px #FD6A40,inset 0 2px 0 #FFF5;cursor:pointer;text-shadow:0 1px 0 #FFF6}
+  .panel p b{color:#8A5A1E}
+  .plank,.panel button,.offer{display:inline-block;font-family:'Trebuchet MS','Segoe UI',sans-serif;font-weight:900;color:#3A2410;background-color:#E3B96A;background-image:repeating-linear-gradient(93deg,#5A320A26 0 2px,transparent 2px 9px);border:3px solid #6B4423;border-bottom:6px solid #4A2E12;border-radius:10px;box-shadow:0 6px 0 #0004,0 0 18px #FD6A40,inset 0 2px 0 #FFF5;cursor:pointer;text-shadow:0 1px 0 #FFF6}
   .panel button{font-size:19px;padding:13px 30px;margin:8px 6px 0}
   .panel button:hover,.offer:hover,.tile:hover{filter:brightness(1.12)}
   .panel button:active{transform:translateY(3px);border-bottom-width:3px}
   .panel button.ghost{background-color:#9A9A9A}
   .sign{font-size:clamp(20px,4vmin,30px);padding:10px 26px;margin:4px auto 8px}
   #startBtn{font-size:clamp(20px,4vmin,26px);padding:12px 44px;margin:6px 0 2px;letter-spacing:3px}
-  .menu{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;margin:6px 0}
-  .menu::before{content:'';position:absolute;left:50%;top:-12px;bottom:-12px;width:18px;transform:translateX(-50%);background:#5A3A1A;border-radius:8px;box-shadow:2px 3px 0 #0004;z-index:0}
-  .menu>*{position:relative;z-index:1}
-  .tiles{display:flex;flex-direction:column;gap:8px;align-items:center}
-  .tile{display:flex;align-items:center;gap:10px;width:270px;padding:8px 14px;font-size:14px;text-align:left}
-  .tile .ic{font-size:24px}
-  .tile:nth-child(1){background-color:#8FE07A}
-  .tile:nth-child(2){background-color:#FF9A5E}
-  .tile:nth-child(3){background-color:#C3A8EE}
-  #seedInput{font-family:monospace;font-size:16px;padding:9px 10px;width:150px;text-align:center;background:linear-gradient(#C9C9C9,#8F8F8F);color:#222;border:3px solid #5A5A5A;border-bottom:6px solid #3A3A3A;border-radius:10px;box-shadow:inset 0 3px 6px #0006,0 4px 0 #0004}
-  #seedHint{font-size:12px;opacity:.9;margin:4px 0 0}
-  .panel .board{display:block;margin:10px auto 0;padding:9px 14px;font-size:13px;font-weight:400;max-width:520px}
+  .menu{display:flex;flex-direction:column;align-items:center;gap:8px;margin:6px 0}
   #offerRow,#shopRow{display:flex;gap:12px;justify-content:center;margin:8px 0;flex-wrap:wrap}
-  .offer{display:block;width:150px;padding:10px 8px;background-color:#7FB069}
-  .offer .ic{display:block;font-size:30px;line-height:1.2;margin-bottom:2px}
+  .offer{display:block;width:150px;padding:8px;border:12px solid transparent;border-image:url(i/panel.png) 20 fill;background:#F6E8C8;border-radius:0}
+  .offer .ic{display:block;width:34px;height:34px;margin:0 auto 2px}
   .offer b{display:block;font-size:17px;margin-bottom:4px}
   .offer span{display:block;font-size:12px;font-weight:400;line-height:1.4;min-height:30px}
   .offer em{display:inline-block;font-style:normal;font-size:14px;margin-top:8px;background:#3A2410D9;color:#FFE9A8;border:1px solid #FFE9A899;border-radius:999px;padding:3px 12px;text-shadow:none}
-  #offerRow .offer:nth-child(2){background-color:#E07A3F}
-  #offerRow .offer:nth-child(3){background-color:#9B7ED9}
-  .offer.skip{background-color:#8A5A2E;width:140px}
+  .offer.skip{width:140px}
   .offer.shop{width:140px;padding:12px 8px}
-  #shopRow .offer:nth-child(1){background-color:#B85C38}
-  #shopRow .offer:nth-child(2){background-color:#E8C33C}
-  #shopRow .offer:nth-child(3){background-color:#9A9A9A}
-  #shopRow .offer:nth-child(4){background-color:#6FA844}
   .offer.off{opacity:.45;filter:grayscale(.6)}
   .offer.bag-item{width:150px;min-height:130px}
-  #bag-heart{background-color:#C05A3A}
-  #bag-bomb{background-color:#9A9A9A}
-  #bag-magnet{background-color:#D9B83C}
   .bag-item.empty{opacity:.45}
   .stats{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:14px 0 8px}
   .stats .plank{padding:10px 14px;min-width:84px}
@@ -166,14 +147,7 @@
   }
   @media (pointer:coarse) and (max-height:500px){
     .panel{max-width:70vw;max-height:88vh}
-    .intro,#seedHint{display:none}
-    .menu::before{display:none}
-    .tiles{flex-direction:row}
-    .tile{display:block;width:108px;padding:6px 4px;font-size:11px;text-align:center}
-    .tile .ic{display:block;font-size:20px}
     #startBtn{padding:9px 28px}
-    #seedInput{padding:6px 8px;font-size:13px}
-    .panel .board{font-size:11px;padding:6px 10px}
     .offer{width:122px;padding:8px 6px}
     .offer.shop{width:106px}
   }
@@ -195,7 +169,7 @@
     <div id="fightText"></div>
     <div id="buildText"></div>
     <div id="toastText"></div>
-    <div id="coinLine">🪙 <span id="coinCount">0</span> COINS &nbsp; 💎 <span id="shardCount">0</span> SHARDS</div>
+    <div id="coinLine"><span class=chip><img class=ic src=i/coin.png><span id=coinCount>0</span></span> <span class=chip><img class=ic src=i/gem.png><span id=shardCount>0</span></span></div>
     <canvas id="minimap" width="140" height="140"></canvas>
     <div id="scoreText">Score 0</div>
     <div id="bossWrap" style="display:none">
@@ -229,66 +203,63 @@
       <div class="cd"></div><div class="key">J</div><div class="lbl">ATTACK</div>
     </div>
     <div id="denyText"></div>
-    <button id="muteBtn" title="Mute">🔊</button>
-    <button id="camBtn" title="Reset camera">🧭</button>
-    <button id="bagBtn" title="Backpack (B)">🎒</button>
+    <button id="muteBtn" title="Mute"><img class=ic src=i/audioOn.png></button>
+    <button id="camBtn" title="Reset camera"><img class=ic src=i/target.png></button>
+    <button id="bagBtn" title="Backpack (B)"><img class=ic src=i/bag.png></button>
   </div>
 
   <div id="titlePanel" class="panel">
     <h1>MOSSLIGHT</h1>
-    <p class="tagline">A bright open-world survival</p>
-    <p class="intro">Help <b>Neri</b> survive 8 waves and defeat the <b>Gloam Bell</b>.<br>Attacks are automatic — tap <b>ATTACK</b> for extra bolts, time your skills.</p>
     <div class="menu">
       <button id="startBtn" class="plank">▶ START</button>
-      <div class="tiles">
-        <div class="tile"><span class="ic">🌸</span><span>Bloomroot Warrens</span></div>
-        <div class="tile"><span class="ic">🔥</span><span>Cinderglass Works</span></div>
-        <div class="tile"><span class="ic">🌙</span><span>Moonmilk Vault</span></div>
-      </div>
     </div>
-    <p class="seedrow">Seed: <input id="seedInput" value="" inputmode="numeric" placeholder="random"></p>
-    <p id="seedHint">Seed = world code. Same number = same world. Empty = random.</p>
-    <p class="board">Move: WASD / arrows / joystick &nbsp;·&nbsp; Attack: J / Space &nbsp;·&nbsp; Skills: Q E R F C &nbsp;·&nbsp; Bag: B<br>Drag empty area: rotate camera &nbsp;·&nbsp; 🧭: reset camera</p>
-    <p id="bestScore">Best: 0 pts</p>
+    <button id="helpBtn" class="plank">? How to play</button>
+  </div>
+
+  <div id="helpPanel" class="panel hidden">
+    <h2 class="plank sign">How to play</h2>
+    <p>Move: WASD / arrows / joystick<br>Attack: J / Space &nbsp;·&nbsp; Skills: Q E R F C &nbsp;·&nbsp; Bag: B<br>Drag empty area: rotate camera</p>
+    <p>Help <b>Neri</b> survive 8 waves and defeat the <b>Gloam Bell</b>.<br>Attacks are automatic — tap <b>ATTACK</b> for extra bolts.</p>
+    <button id="helpCloseBtn">✕ Close</button>
   </div>
 
   <div id="interPanel" class="panel hidden">
-    <h2 class="plank sign">🌟 WAVE CLEARED! 🌟</h2>
+    <h2 class="plank sign"><img class=ic src=i/star.png> WAVE CLEARED! <img class=ic src=i/star.png></h2>
     <p>Next wave in 20s — pick an upgrade!</p>
     <div id="offerRow"></div>
-    <p id="shopCoins">🪙 0 coins — shop at wave break!</p>
-    <p class="plank sign">🛒 SHOP</p>
+    <p id="shopCoins">0 coins — shop at wave break!</p>
+    <p class="plank sign"><img class=ic src=i/shoppingCart.png> SHOP</p>
     <div id="shopRow"></div>
   </div>
 
   <div id="pausePanel" class="panel hidden">
-    <h2 class="plank sign">⏸ PAUSED</h2>
+    <h2 class="plank sign"><img class=ic src=i/pause.png> PAUSED</h2>
     <p>Take a breath. The wilds wait.</p>
     <button id="resumeBtn">▶ Resume</button><br>
     <button id="restartBtn" class="ghost">↻ Restart run</button>
-    <button id="quitBtn" class="ghost">🏠 Title</button>
+    <button id="quitBtn" class="ghost"><img class=ic src=i/home.png> Title</button>
   </div>
 
   <div id="bagPanel" class="panel hidden">
-    <h2 class="plank sign">🎒 BACKPACK</h2>
-    <p id="bagCoins">🪙 0 &nbsp; 💎 0</p>
+    <h2 class="plank sign"><img class=ic src=i/bag.png> BACKPACK</h2>
+    <p id="bagCoins">0 &nbsp; 0</p>
     <div id="offerRow">
-      <button class="offer bag-item" id="bag-heart"><b>❤️ Heart</b><span>Medicine: heal +30 HP</span><em id="bagHeartN">x0</em></button>
-      <button class="offer bag-item" id="bag-bomb"><b>💣 Bomb</b><span>90 dmg blast, nearby enemies (280px)</span><em id="bagBombN">x0</em></button>
-      <button class="offer bag-item" id="bag-magnet"><b>🧲 Magnet</b><span>Pull ALL items to you</span><em id="bagMagnetN">x0</em></button>
+      <button class="offer bag-item" id="bag-heart"><b><img class=ic src=i/heart.png> Heart</b><span>Medicine: heal +30 HP</span><em id="bagHeartN">x0</em></button>
+      <button class="offer bag-item" id="bag-bomb"><b><img class=ic src=i/bomb.png> Bomb</b><span>90 dmg blast, nearby enemies (280px)</span><em id="bagBombN">x0</em></button>
+      <button class="offer bag-item" id="bag-magnet"><b><img class=ic src=i/magnet.png> Magnet</b><span>Pull ALL items to you</span><em id="bagMagnetN">x0</em></button>
     </div>
     <p style="font-size:13px">Tap an item to use it. The game pauses while the bag is open.</p>
     <button id="bagCloseBtn">✕ Close (B)</button>
   </div>
 
   <div id="resultPanel" class="panel hidden">
-    <h1 id="resultTitle">✨ VICTORY ✨</h1>
+    <h1 id="resultTitle">VICTORY</h1>
     <p id="resultBody"></p>
     <button id="againBtn">↻ Play again</button>
-    <button id="titleBtn" class="ghost">🏠 Title</button>
+    <button id="titleBtn" class="ghost"><img class=ic src=i/home.png> Title</button>
   </div>
 </div>
 <script type="module" src="./src/main.js"></script>
-<div id="rotateOverlay"><div class="rotPhone">📱</div><b>Rotate your device to play</b><span>Landscape only</span></div>
+<div id="rotateOverlay"><img class="rotPhone" src=i/phone.png><b>Rotate your device to play</b><span>Landscape only</span></div>
 </body>
 </html>

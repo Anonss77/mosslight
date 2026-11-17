@@ -8,6 +8,7 @@ import {
   COS05, SIN05, COS06, SIN06, FAN_OFF,
 } from './config.js';
 import { makeRng } from './random.js';
+export function ic(n){return '<img class=ic src=i/'+n+'.png>'}
 import {
   generateField, moveField, spawnPoint,
 } from './field.js';
@@ -1017,35 +1018,35 @@ export class Game {
         if (l.kind === 'coin') {
           this.coins++;
           this.score += LOOT.coinScore;
-          this.toastOnce('coin', '🪙 Coins = money! Spend them in the wave-break shop.');
+          this.toastOnce('coin', 'Coins = money! Spend them in the wave-break shop.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+2', '#ffd76a', 18);
           this.audio.play('coin');
         } else if (l.kind === 'shard') {
           this.shards++;
           this.score += LOOT.shardScore;
           p.energy = Math.min(PLAYER.energyMax, p.energy + 6);
-          this.toastOnce('shard', '💎 Shards fuel skills! +6 energy.');
-          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6 ⚡', '#7fb8ff', 18);
+          this.toastOnce('shard', 'Shards fuel skills! +6 energy.');
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6', '#7fb8ff', 18);
           this.audio.play('shard');
         } else if (l.kind === 'magnet') {
           this.bag.magnet++;
-          this.toastOnce('magnet', '🧲 Magnet to bag! Use in bag: pull in all items.');
-          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 🧲', '#7fe8ff', 18);
+          this.toastOnce('magnet', 'Magnet to bag! Use in bag: pull in all items.');
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1', '#7fe8ff', 18);
           this.audio.play('pop');
         } else if (l.kind === 'bomb') {
           this.bag.bomb++;
-          this.toastOnce('bomb', '💣 Bomb to bag! Use in bag: 90 dmg blast.');
-          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 💣', '#ff8a2a', 18);
+          this.toastOnce('bomb', 'Bomb to bag! Use in bag: 90 dmg blast.');
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1', '#ff8a2a', 18);
           this.audio.play('pop');
         } else if (l.kind === 'heart') {
           this.bag.heart++;
-          this.toastOnce('heart', '❤️ Heart to bag! Use in bag: heal +30 HP.');
-          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1 ❤️', '#6fe08a', 18);
+          this.toastOnce('heart', 'Heart to bag! Use in bag: heal +30 HP.');
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+1', '#6fe08a', 18);
           this.audio.play('heal');
         } else if (l.kind === 'starchip') {
           this.shards += 2;
           this.score += 50;
-          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+50 ⭐', '#ffd76a', 20);
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+50', '#ffd76a', 20);
           this.audio.play('shard');
         } else {
           p.hp = Math.min(p.maxHp, p.hp + BOSS.lootHeart);
@@ -1129,16 +1130,16 @@ export class Game {
           this.shards++;
           this.score += LOOT.shardScore;
           p.energy = Math.min(PLAYER.energyMax, p.energy + 6);
-          this.toastOnce('shard', '💎 Shards fuel skills! +6 energy.');
-          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6 ⚡', '#7fb8ff', 18);
+          this.toastOnce('shard', 'Shards fuel skills! +6 energy.');
+          addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6', '#7fb8ff', 18);
         } else if (pk.kind === 'coins') {
           this.coins += 3;
           this.score += 3 * LOOT.coinScore;
-          this.toastOnce('coin', '🪙 Coins = money! Spend them in the wave-break shop.');
+          this.toastOnce('coin', 'Coins = money! Spend them in the wave-break shop.');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+6', '#ffd76a', 18);
         } else {
           p.hp = Math.min(p.maxHp, p.hp + 25);
-          this.toastOnce('fieldheart', '❤️ Field heart: heal +25 HP instantly!');
+          this.toastOnce('fieldheart', 'Field heart: heal +25 HP instantly!');
           addDamageNumber(this.damageNumbers, p.x, p.y - 24, '+25', '#6fe08a', 18);
         }
         this.audio.play(pk.kind === 'heart' ? 'heal' : pk.kind === 'gem' ? 'shard' : 'coin');
@@ -1436,13 +1437,13 @@ export class Game {
     if (scoreEl) scoreEl.textContent = `Score ${this.score}`;
 
     const fightEl = $('fightText');
-    if (fightEl) fightEl.textContent = `⚔️ ${this.kills} KILLS${this.chain >= 2 ? ` · 🔥 CHAIN x${this.chain}` : ''}`;
+    if (fightEl) fightEl.textContent = `${this.kills} KILLS${this.chain >= 2 ? ` · CHAIN x${this.chain}` : ''}`;
     const nextEl = $('nextText');
     if (nextEl) {
       if (this.wave >= WAVE_COUNT) nextEl.textContent = '';
       else {
         const nw = WAVES[this.wave];
-        nextEl.textContent = `NEXT: WAVE ${this.wave + 1} · ${nw.groups}×${nw.perGroup} · ${AREA_NAMES[nw.area]}${nw.boss ? ' · 👑 BOSS' : ''}`;
+        nextEl.textContent = `NEXT: WAVE ${this.wave + 1} · ${nw.groups}×${nw.perGroup} · ${AREA_NAMES[nw.area]}${nw.boss ? ' · BOSS' : ''}`;
       }
     }
     const buildEl = $('buildText');
@@ -1509,7 +1510,7 @@ export class Game {
     for (const o of this.offers) {
       const div = document.createElement('div');
       div.className = 'offer';
-      div.innerHTML = `<i class="ic">${o.ic}</i><b>${o.name}</b><span>${o.desc}</span><em>${o.cost} ${o.cur === 'coin' ? '🪙' : '💎'}</em>`;
+      div.innerHTML = `${ic(o.ic)}<b>${o.name}</b><span>${o.desc}</span><em>${ic(o.cur === 'coin' ? 'coin' : 'gem')} ${o.cost}</em>`;
       div.onclick = () => { this.buyUpgrade(o.id); this.refreshOffers(); };
       row.appendChild(div);
     }
@@ -1525,12 +1526,12 @@ export class Game {
       for (const s of SHOP) {
         const div = document.createElement('div');
         div.className = 'offer shop' + (this.coins < s.cost ? ' off' : '');
-        div.innerHTML = `<b>${s.name}</b><span>${s.desc}</span><em>🪙 ${s.cost}</em>`;
+        div.innerHTML = `${ic(s.ic)}<b>${s.name}</b><span>${s.desc}</span><em>${ic('coin')} ${s.cost}</em>`;
         div.onclick = () => { if (this.buyShop(s.id)) this.showIntermission(); };
         shopRow.appendChild(div);
       }
     }
-    if (shopCoins) shopCoins.textContent = `🪙 ${this.coins} coins — shop at wave break!`;
+    if (shopCoins) shopCoins.innerHTML = `${ic('coin')} ${this.coins} coins — shop at wave break!`;
     panel.classList.remove('hidden');
   }
 
@@ -1579,6 +1580,9 @@ export class Game {
     }
     if (shot === 'cinder') {
       return this.wave >= 4 && this.wave <= 6 && this.waveT <= 25 && this.enemies.length >= 8;
+    }
+    if (shot === 'moon') {
+      return this.wave === 7 && this.waveT <= 25 && this.enemies.length >= 8;
     }
     if (shot === 'boss') {
       if (this.wave !== 8 || !this.boss) return false;
