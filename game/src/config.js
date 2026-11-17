@@ -189,8 +189,8 @@ lowHpWarnEvery: 5,
 export const AREAS = [
 {
 name: 'Bloomroot Warrens',
-wall: '#35705F', floor: '#71CC6F',
-floorAlt: '#7ED47E', water: '#45C8B2', flower: '#FF7099',
+wall: '#35705F', floor: '#7CC242',
+floorAlt: '#8FD14F', water: '#45C8B2', flower: '#FF7099',
 highlight: '#FFF3C4', sky: '#2F7D5C',
 },
 {

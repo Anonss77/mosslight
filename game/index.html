@@ -93,15 +93,15 @@ background: radial-gradient(circle at 35% 30%, #FFF3C4, #E8C33C 60%, #B8860B); b
 .bag-item.empty { opacity: 0.45; }
 .bag-item em{font-size:18px;padding:4px 14px}
 
-.panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:94vw;max-height:92vh;overflow-y:auto;scrollbar-width:none;padding:4px 16px 12px;font-family:'Trebuchet MS','Segoe UI',sans-serif;color:#3A2410;text-shadow:0 1px 0 #FFF8;border:16px solid transparent;border-image:url(i/panel.png) 20 fill;background:#F6E8C8}
+.panel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:94vw;max-height:92vh;overflow-y:auto;scrollbar-width:none;padding:4px 16px 8px;font-family:'Trebuchet MS','Segoe UI',sans-serif;color:#3A2410;text-shadow:0 1px 0 #FFF8;border:16px solid transparent;border-image:url(i/panel.png) 20 fill;background:#F6E8C8}
 #stage:has(.panel:not(.hidden)) :is(#waveText,#timerText,#areaText,#nextText){display:none}
 #interPanel{width:640px}
 .panel h1{margin:0 0 2px;font-size:clamp(34px,8vmin,76px);font-weight:900;letter-spacing:5px;transform:rotate(-2deg);background:linear-gradient(#FFE98A,#F2B705 45%,#C8891A 70%,#8A5A00);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:2px #4A2E00;filter:drop-shadow(0 4px 6px rgba(74,46,0,.5))}
 .panel p{font-size:14px;line-height:1.5;margin:6px 0}
 .panel p b{color:#8A5A1E}
-#heroRow{display:flex;gap:10px;justify-content:center;margin:4px 0 2px;flex-wrap:wrap}
-.hero-card{width:128px;padding:4px 6px 6px}
-.hero-card img{display:block;width:64px;height:64px;margin:0 auto}
+#heroRow{display:flex;gap:10px;justify-content:center;margin:2px 0;flex-wrap:wrap}
+.hero-card{width:128px;padding:2px 6px 4px}
+.hero-card img{display:block;width:88px;height:88px;margin:0 auto}
 .hero-card.sel{outline:4px solid #FFD76A;outline-offset:2px;filter:brightness(1.08)}
 .plank,.panel button,.offer{display:inline-block;font-family:'Trebuchet MS','Segoe UI',sans-serif;font-weight:900;color:#3A2410;background-color:#E3B96A;background-image:repeating-linear-gradient(93deg,#5A320A26 0 2px,transparent 2px 9px);border:3px solid #6B4423;border-bottom:6px solid #4A2E12;border-radius:10px;box-shadow:0 6px 0 #0004,0 0 18px #FD6A40,inset 0 2px 0 #FFF5;cursor:pointer;text-shadow:0 1px 0 #FFF6}
 .panel button{font-size:17px;padding:10px 24px;margin:6px 4px 0}
@@ -109,20 +109,21 @@ background: radial-gradient(circle at 35% 30%, #FFF3C4, #E8C33C 60%, #B8860B); b
 .panel button:active{transform:translateY(3px);border-bottom-width:3px}
 .panel button.ghost{background-color:#9A9A9A}
 .sign{font-size:clamp(18px,4vmin,26px);padding:8px 20px;margin:4px auto 6px}
-#startBtn{font-size:clamp(20px,4vmin,26px);padding:10px 36px;margin:4px 0 2px;letter-spacing:3px}
-.menu{display:flex;flex-direction:column;align-items:center;gap:6px;margin:4px 0}
+#startBtn{font-size:clamp(20px,4vmin,26px);padding:6px 48px;margin:4px 0 2px;letter-spacing:3px}
+.menu{display:flex;flex-direction:column;align-items:center;gap:4px;margin:4px 0}
 .menuRow{display:flex;gap:8px}
-.menuRow .plank{padding:10px 12px;white-space:nowrap}
-.orn img{width:26px;height:26px;margin:0 5px;filter:drop-shadow(0 2px 2px #0006)}
-.best{padding:6px 16px;font-size:15px}
+.menuRow .plank{padding:4px 12px;font-size:13px;white-space:nowrap}
+#resetBtn{padding:3px 18px;font-size:13px}
+.menu button{margin-top:2px}
+.orn img{width:16px;height:16px;margin:0 5px;filter:drop-shadow(0 2px 2px #0006)}
+.best{padding:4px 14px;font-size:13px}
 #titlePanel{width:min(50vw,700px)}
 #titlePanel .hero-card{width:150px}
 #titlePanel .hero-card span{min-height:0}
-#titlePanel .hero-card img{width:64px;height:64px}
-#titlePanel h1{font-size:clamp(38px,6.5vmin,60px);color:#FFF8E7;background-color:#8B5E34;background-image:repeating-linear-gradient(93deg,#5A320A26 0 2px,transparent 2px 9px);-webkit-background-clip:border-box;background-clip:border-box;text-shadow:0 3px 0 #4A2E00,0 6px 10px #0007;border:3px solid #6B4423;border-bottom:6px solid #4A2E12;border-radius:12px;padding:4px 24px 8px;display:inline-block}
-.lg{display:block;width:36px;height:36px;margin:0 auto -10px}
+#titlePanel h1{font-size:clamp(32px,5vmin,50px);color:#FFF8E7;background-color:#8B5E34;background-image:url(i/plank.png);background-size:100% 100%;-webkit-background-clip:border-box;background-clip:border-box;text-shadow:0 3px 0 #4A2E00,0 6px 10px #0007;border:3px solid #6B4423;border-bottom:6px solid #4A2E12;border-radius:12px;padding:4px 24px 8px;display:inline-block}
+.lg{display:block;width:48px;height:36px;margin:0 auto -10px}
 .lsh{width:34px;height:34px;margin:0 -6px -4px;vertical-align:bottom}
-.vine{position:absolute;width:32px;top:64px}
+.vine{position:absolute;width:44px;top:96px;height:66%}
 .lang.sel{outline:4px solid #FFD76A}
 #offerRow,#shopRow{display:flex;gap:10px;justify-content:center;margin:6px 0;flex-wrap:wrap}
 .offer{display:block;width:128px;padding:6px;box-sizing:border-box;border:12px solid transparent;border-image:url(i/panel.png) 20 fill;background:#F6E8C8;border-radius:0}
@@ -207,21 +208,24 @@ background: radial-gradient(circle at 35% 30%, #FFF3C4, #E8C33C 60%, #B8860B); b
 </div>
 
 <div id="titlePanel" class="panel">
-<img class=vine style="left:4px" src=i/leaf.png><img class=vine style="right:4px;transform:scaleX(-1)" src=i/leaf.png>
-<img class=lg src=i/gem.png><div><img class=lsh src=i/shroom-red.png><h1>MOSSLIGHT</h1><img class=lsh src=i/shroom-purple.png></div>
+<img class=vine style="left:4px" src=i/vine.png><img class=vine style="right:4px;transform:scaleX(-1)" src=i/vine.png>
+<img class=lg src=i/logo-gem.png><div><img class=lsh src=i/shroom-red.png><h1>MOSSLIGHT</h1><img class=lsh src=i/shroom-purple.png></div>
 <div class="orn"><img src=i/candle.png><img src=i/gem.png><img src=i/flame.png><img src=i/gem.png><img src=i/candle.png></div>
 <div id="heroRow">
-<button class="offer hero-card sel" data-hero="neri"><img src="i/hero-neri.png"><b>Neri</b><span>Lv.1 - 0 Exp</span><span data-l="roleMage">Lantern Mage</span><em data-l="tagBal">Balanced</em></button>
-<button class="offer hero-card" data-hero="aldric"><img src="i/hero-aldric.png"><b>Aldric</b><span>Lv.1 - 0 Exp</span><span data-l="roleKnight">Knight</span><em data-l="tagTgh">Tough</em></button>
-<button class="offer hero-card" data-hero="lyra"><img src="i/hero-lyra.png"><b>Lyra</b><span>Lv.1 - 0 Exp</span><span data-l="roleRanger">Ranger</span><em data-l="tagFst">Fast</em></button>
+<button class="offer hero-card sel" data-hero="neri"><img src="i/hero-neri.png"><b>Neri</b><span>Lv.1 - 0 Exp</span><em data-l="tagBal">Balanced</em></button>
+<button class="offer hero-card" data-hero="aldric"><img src="i/hero-aldric.png"><b>Aldric</b><span>Lv.1 - 0 Exp</span><em data-l="tagTgh">Tough</em></button>
+<button class="offer hero-card" data-hero="lyra"><img src="i/hero-lyra.png"><b>Lyra</b><span>Lv.1 - 0 Exp</span><em data-l="tagFst">Fast</em></button>
 </div>
 <div class="menu">
 <button id="startBtn" class="plank" data-l="start">▶ START</button>
 <div class="menuRow">
 <button id="helpBtn" class="plank" data-l="help">? How to play</button>
 <button id="titleMuteBtn" class="plank">♪ Sound: On</button>
-<button id="langIdBtn" class="plank lang">ID</button><button id="langEnBtn" class="plank lang">EN</button><button id="resetBtn" class="plank">Reset :D</button>
 </div>
+<div class="menuRow">
+<button id="langIdBtn" class="plank lang">ID</button><button id="langEnBtn" class="plank lang">EN</button>
+</div>
+<button id="resetBtn" class="plank">Reset :D</button>
 </div>
 <div class="plank best" id="bestTally">Best: 0</div>
 </div>
