@@ -412,7 +412,7 @@ ux * PLAYER.boltSpeed, uy * PLAYER.boltSpeed,
 p.boltDamage, 'bolt', 2,
 ));
 burstParticles(this.particles, this.vrng, p.x + ux * 14, p.y + uy * 14, '#ffe9a8', 4, 90);
-this.audio.play('bolt');
+this.audio.play(this.hero.proj);
 return true;
 }
 
@@ -432,7 +432,7 @@ p.x + ux * 14, p.y + uy * 14,
 ux * PLAYER.boltSpeed, uy * PLAYER.boltSpeed,
 p.boltDamage, 'bolt', 2,
 ));
-this.audio.play('bolt');
+this.audio.play(this.hero.proj);
 }
 
 shove(e, x, y, kb) {
@@ -473,7 +473,7 @@ Math.cos(a) * PLAYER.boltSpeed, Math.sin(a) * PLAYER.boltSpeed, dmg, 'bolt', 2,
 ));
 }
 burstParticles(this.particles, this.vrng, p.x + p.fx * 14, p.y + p.fy * 14, '#ffe9a8', 4, 90);
-this.audio.play('bolt');
+this.audio.play(s.name);
 } else if (s.fx === 'patch') {
 const target = this.nearestTarget(s.range, true);
 let ax, ay;
@@ -486,7 +486,7 @@ for (const e of [...this.enemies]) {
 if (dist(ax, ay, e.x, e.y) <= s.r + e.radius) this.damageEnemy(e, s.dmg + bonus, 'skill', '#ff8a2a');
 }
 if (this.boss && dist(ax, ay, this.boss.x, this.boss.y) <= s.r + this.boss.radius) this.damageBoss(s.dmg + bonus, 'skill');
-this.audio.play('ember');
+this.audio.play(s.name);
 } else if (s.fx === 'arc' || s.fx === 'charge') {
 if (s.fx === 'charge') {
 const x0 = p.x, y0 = p.y;
@@ -512,13 +512,12 @@ this.damageBoss(dmg, 'skill');
 hits++;
 }
 if (hits > 0) this.hitstop = FEEL.hitstopCrescent;
-this.audio.play(s.fx === 'charge' ? 'shield' : 'slash');
-if (s.fx === 'charge') this.audio.play('slash');
+this.audio.play(s.name);
 } else if (s.fx === 'rain') {
 p.ultDef = s;
 p.starfallWindup = s.windup;
 p.starfallX = p.x; p.starfallY = p.y;
-this.audio.play('starfall');
+this.audio.play(s.name);
 } else if (s.fx === 'frostshot') {
 const a0 = this.aimAt();
 const pr = createProjectile(
@@ -527,7 +526,7 @@ Math.cos(a0) * PLAYER.boltSpeed, Math.sin(a0) * PLAYER.boltSpeed, s.dmg + bonus,
 );
 pr.freeze = s.freeze;
 this.projectiles.push(pr);
-this.audio.play('frost');
+this.audio.play(s.name);
 }
 this.updateHUD();
 return true;
