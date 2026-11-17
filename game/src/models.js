@@ -370,43 +370,11 @@ export function buildTorch() {
 
 export function buildProp(area, kind) {
  const g = new THREE.Group();
- if (kind === 'flower') {
-  g.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6), lam(0x3a7a3a), 0, 0.25, 0));
-  const petal = lam(area === 0 ? 0xff7099 : area === 1 ? 0xff6b7a : 0xf6f0ff);
-  for (let i = 0; i < 5; i++) {
-   const a = (i / 5) * Math.PI * 2;
-   g.add(mesh(new THREE.SphereGeometry(0.12, 8, 6), petal, Math.cos(a) * 0.16, 0.52, Math.sin(a) * 0.16));
-  }
-  g.add(mesh(new THREE.SphereGeometry(0.1, 8, 6), lam(0xffd76a), 0, 0.54, 0));
- } else if (kind === 'tuft') {
-  for (const [x, z, h] of [[-0.12, 0, 0.5], [0.1, 0.08, 0.62], [0, -0.12, 0.45]]) {
-   const blade = mesh(new THREE.ConeGeometry(0.09, h, 5), lam(area === 2 ? 0xa7e760 : 0x5da85a), x, h / 2, z);
-   g.add(blade);
-  }
- } else if (kind === 'pond') {
-  const disc = mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.08, 18), phong(0x45c8b2, { shininess: 120, transparent: true, opacity: 0.85 }), 0, 0.04, 0);
-  g.add(disc);
- } else if (kind === 'mushroom') {
+ if (kind === 'mushroom') {
   g.add(mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.3, 8), lam(0xfff3c4), 0, 0.15, 0));
   const cap = mesh(new THREE.SphereGeometry(0.3, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xff7fb0), 0, 0.3, 0);
   cap.scale.y = 0.7;
   g.add(cap);
- } else if (kind === 'anvil') {
-  g.add(mesh(new THREE.BoxGeometry(0.7, 0.35, 0.4), lam(0x3a3a44), 0, 0.55, 0));
-  g.add(mesh(new THREE.BoxGeometry(0.95, 0.22, 0.42), lam(0x55555f), 0, 0.82, 0));
-  g.add(mesh(new THREE.BoxGeometry(0.5, 0.4, 0.35), lam(0x2a2a32), 0, 0.2, 0));
- } else if (kind === 'gear') {
-  const gear = mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.14, 12), phong(0xd89a4a, { shininess: 100 }), 0, 0.1, 0);
-  g.add(gear);
-  for (let i = 0; i < 6; i++) {
-   const a = (i / 6) * Math.PI * 2;
-   g.add(mesh(new THREE.BoxGeometry(0.16, 0.14, 0.16), phong(0xd89a4a), Math.cos(a) * 0.45, 0.1, Math.sin(a) * 0.45));
-  }
-  g.add(mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.18, 10), lam(0x35c9d0), 0, 0.12, 0));
- } else if (kind === 'furnace') {
-  g.add(mesh(new THREE.BoxGeometry(0.9, 1.0, 0.7), lam(0x6a3a3a), 0, 0.5, 0));
-  g.add(mesh(new THREE.BoxGeometry(0.5, 0.45, 0.06), basic(0xff8a2a), 0, 0.4, 0.36));
-  g.add(mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.5, 8), lam(0x3a3a44), 0, 1.2, 0));
  } else if (kind === 'crystal') {
   const c = area === 1 ? 0x35c9d0 : 0xc9bbf5;
   for (const [x, z, s, ry] of [[0, 0, 1, 0], [-0.35, 0.2, 0.6, 0.7], [0.3, -0.15, 0.75, 1.9]]) {
@@ -420,117 +388,7 @@ export function buildProp(area, kind) {
   const tip = mesh(new THREE.ConeGeometry(0.38, 0.45, 4), lam(0xc9bbf5), 0, 1.9, 0);
   tip.rotation.y = Math.PI / 4;
   g.add(tip);
- } else if (kind === 'starflower') {
-  g.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.55, 6), lam(0x7a9a5a), 0, 0.28, 0));
-  for (let i = 0; i < 5; i++) {
-   const a = (i / 5) * Math.PI * 2;
-   const petal = mesh(new THREE.ConeGeometry(0.09, 0.3, 4), basic(0xf6f0ff), Math.cos(a) * 0.14, 0.58, Math.sin(a) * 0.14);
-   petal.rotation.z = Math.cos(a) * 0.9;
-   g.add(petal);
-  }
-  g.add(mesh(new THREE.SphereGeometry(0.09, 8, 6), basic(0xffd76a), 0, 0.6, 0));
- } else if (kind === 'fungus') {
-  const cap = mesh(new THREE.SphereGeometry(0.3, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), phong(0xa7e760, { emissive: 0x2a4a0a }), 0, 0.28, 0);
-  cap.scale.y = 0.7;
-  g.add(cap);
-  g.add(mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.28, 8), lam(0xd8e8c8), 0, 0.14, 0));
- } else if (kind === 'tree') {
-  g.add(mesh(new THREE.CylinderGeometry(0.14, 0.22, 0.9, 7), lam(0x6a452c), 0, 0.45, 0));
-  g.add(mesh(new THREE.SphereGeometry(0.62, 10, 8), lam(0x4a9a4a), 0, 1.25, 0));
-  g.add(mesh(new THREE.SphereGeometry(0.42, 10, 8), lam(0x5da85a), 0.35, 0.95, 0.15));
- } else if (kind === 'rock') {
-  for (const [x, z, s] of [[0, 0, 1], [-0.3, 0.15, 0.6], [0.28, -0.12, 0.7]]) {
-   const r = mesh(new THREE.DodecahedronGeometry(0.4 * s, 0), lam(0x8a8a96), x, 0.22 * s, z);
-   r.rotation.y = s * 2;
-   g.add(r);
-  }
- } else if (kind === 'bush') {
-  for (const [x, z, s] of [[0, 0, 1], [-0.35, 0.1, 0.7], [0.35, -0.1, 0.75]]) {
-   g.add(mesh(new THREE.SphereGeometry(0.42 * s, 8, 6), lam(0x4a9a4a), x, 0.35 * s, z));
-  }
- } else if (kind === 'stump') {
-  g.add(mesh(new THREE.CylinderGeometry(0.3, 0.36, 0.5, 8), lam(0x6a452c), 0, 0.25, 0));
-  g.add(mesh(new THREE.CylinderGeometry(0.32, 0.3, 0.08, 8), lam(0x6fe08a), 0, 0.52, 0));
-  const cap = mesh(new THREE.SphereGeometry(0.16, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2), lam(0xff7fb0), 0.18, 0.56, 0.1);
-  cap.scale.y = 0.7;
-  g.add(cap);
- } else if (kind === 'barrel') {
-  g.add(mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.8, 10), lam(0x8a5a3a), 0, 0.4, 0));
-  for (const y of [0.18, 0.62]) {
-   const band = mesh(new THREE.TorusGeometry(0.34, 0.035, 6, 14), gold(), 0, y, 0);
-   band.rotation.x = Math.PI / 2;
-   g.add(band);
-  }
- } else if (kind === 'crate') {
-  g.add(mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), lam(0xa8763e), 0, 0.35, 0));
-  for (const rz of [0.6, -0.6]) {
-   const plank = mesh(new THREE.BoxGeometry(0.72, 0.12, 0.05), lam(0x6a452c), 0, 0.35, 0.36);
-   plank.rotation.z = rz;
-   g.add(plank);
-  }
- } else if (kind === 'moonflower') {
-  g.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.6, 6), lam(0x7a9a5a), 0, 0.3, 0));
-  for (let i = 0; i < 5; i++) {
-   const a = (i / 5) * Math.PI * 2;
-   const petal = mesh(new THREE.ConeGeometry(0.09, 0.34, 4), basic(0xf6f0ff), Math.cos(a) * 0.15, 0.62, Math.sin(a) * 0.15);
-   petal.rotation.z = Math.cos(a) * 0.9;
-   g.add(petal);
-  }
-  g.add(mesh(new THREE.SphereGeometry(0.09, 8, 6), basic(0x76dde0), 0, 0.64, 0));
- } else if (kind === 'spire') {
-  const sp = mesh(new THREE.OctahedronGeometry(0.3, 0), phong(0x8a7ac8, { flatShading: true, emissive: 0x2a1a4a }), 0, 0.8, 0);
-  sp.scale.set(1, 3.2, 1);
-  g.add(sp);
  }
- return { group: g, parts: {} };
-}
-
-export function buildSlash() {
- const g = new THREE.Group();
- const arc = new THREE.Mesh(
-  new THREE.TorusGeometry(1.6, 0.45, 10, 24, Math.PI * 1.1),
-  new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }),
- );
- arc.rotation.x = -Math.PI / 2;
- arc.rotation.z = Math.PI * 0.45;
- g.add(arc);
- const glow = new THREE.Mesh(
-  new THREE.TorusGeometry(1.6, 0.75, 10, 24, Math.PI * 1.1),
-  new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.45 }),
- );
- glow.rotation.x = -Math.PI / 2;
- glow.rotation.z = Math.PI * 0.45;
- g.add(glow);
- return { group: g, parts: { arc, glow } };
-}
-
-export function buildEmberPatch() {
- const g = new THREE.Group();
- const disc = new THREE.Mesh(
-  new THREE.CircleGeometry(1, 24),
-  new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.8, depthWrite: false }),
- );
- disc.rotation.x = -Math.PI / 2;
- disc.position.y = 0.05;
- g.add(disc);
- const tongues = [];
- for (let i = 0; i < 12; i++) {
-  const a = (i / 12) * Math.PI * 2;
-  const flame = mesh(
-   new THREE.ConeGeometry(0.34, 1.7, 6),
-   new THREE.MeshBasicMaterial({ color: i % 2 ? 0xffc94d : 0xff8a2a, transparent: true, opacity: 0.9 }),
-   Math.cos(a) * 0.6, 0.4, Math.sin(a) * 0.6,
-  );
-  g.add(flame);
-  tongues.push(flame);
- }
- return { group: g, parts: { disc, tongues } };
-}
-
-export function buildStreak() {
- const g = new THREE.Group();
- g.add(mesh(new THREE.CylinderGeometry(0.16, 0.16, 2.2, 6), basic(0xffd76a), 0, 0, 0));
- g.add(mesh(new THREE.SphereGeometry(0.24, 8, 6), basic(0xfff2c0), 0, -1.1, 0));
  return { group: g, parts: {} };
 }
 
