@@ -486,14 +486,14 @@ d.tex.needsUpdate = true;
 function makeHpBar(w) {
 const g = new THREE.Group();
 const bg = new THREE.Mesh(
-new THREE.PlaneGeometry(w, 0.15),
-new THREE.MeshBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.85, depthTest: false }),
+new THREE.PlaneGeometry(w, 0.22),
+new THREE.MeshBasicMaterial({ color: 0x1a1a1a, transparent: true, opacity: 0.95, depthTest: false }),
 );
 bg.renderOrder = 5;
 const fillW = w - 0.06;
 const fill = new THREE.Mesh(
-new THREE.PlaneGeometry(fillW, 0.1),
-new THREE.MeshBasicMaterial({ color: 0x7fe07f, transparent: true, opacity: 0.95, depthTest: false }),
+new THREE.PlaneGeometry(fillW, 0.16),
+new THREE.MeshBasicMaterial({ color: 0x6fbf5a, transparent: true, opacity: 0.95, depthTest: false }),
 );
 fill.renderOrder = 6;
 fill.position.z = 0.001;
@@ -507,7 +507,7 @@ function updateHpBar(hb, frac) {
 const f = Math.max(0, Math.min(1, frac));
 hb.fill.scale.x = Math.max(0.001, f);
 hb.fill.position.x = -(1 - f) * hb.fillW / 2;
-hb.fill.material.color.setHex(f > 0.5 ? 0x7fe07f : f > 0.25 ? 0xffc94d : 0xff4f4f);
+hb.fill.material.color.setHex(f > 0.5 ? 0x6fbf5a : f > 0.25 ? 0xffc94d : 0xff4f4f);
 hb.group.visible = true;
 }
 
